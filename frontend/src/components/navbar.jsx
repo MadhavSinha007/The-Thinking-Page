@@ -1,9 +1,21 @@
-// Navbar.jsx
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import SearchBar from "./searchbar";
 import Logo from "../assets/logo.png";
 
 const Navbar = ({ onLogout, onSearch, isSearching = false }) => {
+  const navigate = useNavigate();
+
+  // Fix: Use parentheses () instead of backticks ``
+  const handleSearch = (query) => {
+    if (query.trim()) {
+      onSearch && onSearch(query);
+      navigate(`/home?search=${encodeURIComponent(query)}`); // ✅ Fixed
+    } else {
+      navigate('/home');
+    }
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 bg-white border-b border-black/10 z-50">
       <div
@@ -15,8 +27,16 @@ const Navbar = ({ onLogout, onSearch, isSearching = false }) => {
       >
         {/* Left side: Logo + Text */}
         <div className="flex items-center gap-3">
-          <img src={Logo} alt="Logo" className="h-8 w-8 object-contain" />
-          <span className="hidden sm:inline text-xl font-semibold text-purple-600">
+          <img 
+            src={Logo} 
+            alt="Logo" 
+            className="h-8 w-8 object-contain cursor-pointer"
+            onClick={() => navigate('/home')}
+          />
+          <span 
+            className="hidden sm:inline text-xl font-semibold text-purple-600 cursor-pointer"
+            onClick={() => navigate('/home')}
+          >
             TheThinkingPage
           </span>
         </div>
@@ -24,7 +44,7 @@ const Navbar = ({ onLogout, onSearch, isSearching = false }) => {
         {/* Center: Search Bar */}
         <div className="flex-1 max-w-2xl mx-4 sm:mx-6">
           <SearchBar 
-            onSearch={onSearch}
+            onSearch={handleSearch}
             isLoading={isSearching}
             placeholder="Search books, authors, or genres..."
             className="max-w-none"

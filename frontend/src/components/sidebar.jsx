@@ -7,6 +7,7 @@ const Sidebar = () => {
   // NavItem Component
   const NavItem = ({ to, Icon }) => {
     const isActive = location.pathname === to;
+    
     return (
       <Link
         to={to}
@@ -23,7 +24,7 @@ const Sidebar = () => {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden sm:flex h-screen w-20 bg-white flex-col items-center py-6 border-r border-black/10">
+      <aside className="hidden sm:flex fixed left-0 top-0 h-screen w-20 bg-white flex-col items-center py-6 border-r border-black/10 z-50">
         {/* Center nav */}
         <div className="flex flex-col gap-6 flex-1 justify-center">
           <NavItem to="/home" Icon={FiHome} />
@@ -39,7 +40,7 @@ const Sidebar = () => {
       </aside>
 
       {/* Mobile Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 flex sm:hidden bg-white border-t border-black/10 justify-around py-2">
+      <nav className="fixed bottom-0 left-0 right-0 flex sm:hidden bg-white border-t border-black/10 justify-around py-2 z-50">
         <NavItem to="/home" Icon={FiHome} />
         <NavItem to="/history" Icon={FiRotateCcw} />
         <NavItem to="/saved" Icon={FiBookmark} />
