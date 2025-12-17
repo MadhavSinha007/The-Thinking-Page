@@ -220,7 +220,7 @@ const BookList = ({ searchQuery = "" }) => {
   const fetchBooks = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8080/api/books');
+      const response = await fetch('http://localhost:8090/api/books');
       
       if (!response.ok) {
         throw new Error('Failed to fetch books');
