@@ -1,0 +1,41 @@
+@baseUrl = http://localhost:8090/api
+
+# ================= BOOK TESTS =================
+
+### 1. Create a new Book
+# @name createBookRequest
+POST {{baseUrl}}/books
+Content-Type: application/json
+
+{
+  "title": "The Pragmatic Programmer",
+  "author": "Andrew Hunt",
+  "publicationYear": 1999,
+  "file": {
+    "type": "pdf",
+    "url": "http://example.com/pragmatic.pdf"
+  }
+}
+
+### 2. Get All Books
+GET {{baseUrl}}/books
+
+### 3. Get Specific Book by ID
+# This uses the ID from the response of request #1 automatically
+@bookId = {{createBookRequest.response.body.id}}
+GET {{baseUrl}}/books/{{bookId}}
+
+
+# ================= COMS TESTS =================
+
+### 4. Create a new Com
+POST {{baseUrl}}/coms
+Content-Type: application/json
+
+{
+  "message": "This API is working perfectly.",
+  "sender": "DevUser"
+}
+
+### 5. Get All Coms
+GET {{baseUrl}}/com
