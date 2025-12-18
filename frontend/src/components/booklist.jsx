@@ -25,7 +25,7 @@ const BookSection = ({ title, books, viewAllLink }) => {
       <div className="overflow-x-auto scrollbar-hide -mx-2 px-2">
         <div className="flex gap-5 pb-4">
           {displayBooks.map((book) => (
-            <div key={book._id} className="flex-shrink-0 w-[180px]">
+            <div key={book.id} className="flex-shrink-0 w-[180px]">
               <BookCard book={book} />
             </div>
           ))}
@@ -288,7 +288,7 @@ const BookList = ({ searchQuery = "" }) => {
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
             {categories.searchResults?.map((book) => (
-              <div key={book._id} className="w-full">
+              <div key={book.id} className="w-full">
                 <BookCard book={book} />
               </div>
             ))}

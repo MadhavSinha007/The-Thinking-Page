@@ -6,9 +6,9 @@ const BookCard = ({ book }) => {
   const defaultCover = "https://via.placeholder.com/180x270?text=No+Cover";
   
   const handleClick = () => {
-    console.log('BookCard clicked! Book ID:', book._id);
-    console.log('Navigating to:', `/book/${book._id}`);
-    navigate(`/book/${book._id}`);
+    console.log('BookCard clicked! Book ID:', book.id);
+    console.log('Navigating to:', `/book/${book.id}`);
+    navigate(`/book/${book.id}`);
   };
   
   return (

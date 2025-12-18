@@ -8,166 +8,114 @@ const BookDetail = () => {
   const navigate = useNavigate();
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
   useEffect(() => {
     fetchBookDetails();
+    checkIfSaved();
+    checkIfLiked();
   }, [id]);
 
   const fetchBookDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8080/api/books/${id}`);
-      
+      setError(null);
+
+      const response = await fetch(`http://localhost:8090/api/books/${id}`);
+
       if (!response.ok) {
-        throw new Error('Failed to fetch book details');
+        throw new Error('Book not found');
       }
-      
+
       const data = await response.json();
       setBook(data);
       setLoading(false);
     } catch (err) {
-      console.log('Using mock data - backend not connected');
-      const mockBook = getMockBookById(id);
-      setBook(mockBook);
+      console.error('Error fetching book:', err);
+      setError(err.message);
       setLoading(false);
     }
   };
 
-  const getMockBookById = (bookId) => {
-    const mockBooks = {
-      "1": {
-        _id: "1",
-        title: "101 cách của đồ đại lão hằng xóm",
-        author: "Đồng Vũ",
-        genre: "Romance",
-        rating: "4",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1660145160i/62022434.jpg",
-        desc: "Tống Thiên Thi luôn cảm thấy hàng xóm mới tới là người không dễ công chúng, bởi hắn không chỉ lạnh lùng mà lỡ nói ra chẳng để ưa lại còt. Mãi cho đến một hôm, khi cùa đến môi giới để đằm cảng anh, cô mới phải ở một trong những người trong những đối đối đối đối đắm 6 anh.\n\nĐôi mắt của tuổi từ Ẩn sang cuốc: 'Trăm nhân đế có quả, tài chính là quả của em.'\nTống Thiên Thi người đỡn ống và mặc chính là trước một, đồt nhiên thậy đối được điềm 6 anh.\n\nCó cho rằng...View more",
-        producer: "Updating",
-        releaseStatus: "25/50",
-        reviews: 1,
-        language: "vie"
-      },
-      "2": {
-        _id: "2",
-        title: "Frankenstein; Or, The Modern Prometheus",
-        author: "Mary Wollstonecraft Shelley",
-        genre: "Gothic Fiction",
-        rating: "4.6",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1669159060i/63555343.jpg",
-        desc: "Frankenstein; or, The Modern Prometheus is an 1818 novel written by English author Mary Shelley. Frankenstein tells the story of Victor Frankenstein, a young scientist who creates a sapient creature in an unorthodox scientific experiment. Shelley started writing the story when she was 18, and the first edition was published anonymously in London on 1 January 1818, when she was 20. Her name first appeared in the second edition, which was published in Paris in 1821.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 2847,
-        language: "eng"
-      },
-      "3": {
-        _id: "3",
-        title: "To Kill a Mockingbird",
-        author: "Harper Lee",
-        genre: "Classic Fiction",
-        rating: "4.8",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1553383690i/2657.jpg",
-        desc: "A gripping tale of racial injustice and childhood innocence in the Depression-era South.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 5234,
-        language: "eng"
-      },
-      "4": {
-        _id: "4",
-        title: "1984",
-        author: "George Orwell",
-        genre: "Dystopian",
-        rating: "4.7",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1657781256i/61439040.jpg",
-        desc: "A dystopian social science fiction novel and cautionary tale about totalitarianism.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 4521,
-        language: "eng"
-      },
-      "7": {
-        _id: "7",
-        title: "Harry Potter and the Sorcerer's Stone",
-        author: "J.K. Rowling",
-        genre: "Fantasy",
-        rating: "4.9",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1598823299i/42844155.jpg",
-        desc: "A young wizard's journey begins at Hogwarts School of Witchcraft and Wizardry.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 8234,
-        language: "eng"
-      },
-      "8": {
-        _id: "8",
-        title: "The Hobbit",
-        author: "J.R.R. Tolkien",
-        genre: "Fantasy",
-        rating: "4.7",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1546071216i/5907.jpg",
-        desc: "A fantasy novel about the quest of home-loving hobbit Bilbo Baggins.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 3456,
-        language: "eng"
-      },
-      "10": {
-        _id: "10",
-        title: "The Lord of the Rings",
-        author: "J.R.R. Tolkien",
-        genre: "Fantasy",
-        rating: "4.9",
-        cover: "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1566425108i/33.jpg",
-        desc: "An epic high-fantasy novel about the quest to destroy the One Ring.",
-        producer: "Completed",
-        releaseStatus: "Complete",
-        reviews: 9123,
-        language: "eng"
-      }
-    };
-    
-    return mockBooks[bookId] || mockBooks["1"];
+  const checkIfSaved = () => {
+    const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
+    setIsSaved(savedBooks.some(b => b.id === id));
+  };
+
+  const checkIfLiked = () => {
+    const likedBooks = JSON.parse(localStorage.getItem('likedBooks') || '[]');
+    setIsLiked(likedBooks.some(b => b.id === id));
   };
 
   const handleReadNow = () => {
-    console.log('Read now clicked for book:', book._id);
-    // TODO: Add your read logic here
+    const history = JSON.parse(localStorage.getItem('history') || '[]');
+    const bookForHistory = { ...book, lastRead: new Date().toISOString() };
+
+    const filteredHistory = history.filter(b => b.id !== book.id);
+    filteredHistory.unshift(bookForHistory);
+    localStorage.setItem('history', JSON.stringify(filteredHistory.slice(0, 50)));
+
+    if (book.file) {
+      window.open(book.file, '_blank');
+    } else {
+      alert('Book file not available');
+    }
   };
 
   const handleSave = () => {
-    setIsSaved(!isSaved);
-    // TODO: Add your save logic here
+    const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
+
+    if (isSaved) {
+      const filtered = savedBooks.filter(b => b.id !== book.id);
+      localStorage.setItem('savedBooks', JSON.stringify(filtered));
+      setIsSaved(false);
+    } else {
+      const bookForSave = { ...book, savedAt: new Date().toISOString() };
+      savedBooks.push(bookForSave);
+      localStorage.setItem('savedBooks', JSON.stringify(savedBooks));
+      setIsSaved(true);
+    }
   };
 
   const handleLike = () => {
-    setIsLiked(!isLiked);
-    // TODO: Add your like logic here
+    const likedBooks = JSON.parse(localStorage.getItem('likedBooks') || '[]');
+
+    if (isLiked) {
+      const filtered = likedBooks.filter(b => b.id !== book.id);
+      localStorage.setItem('likedBooks', JSON.stringify(filtered));
+      setIsLiked(false);
+    } else {
+      likedBooks.push(book);
+      localStorage.setItem('likedBooks', JSON.stringify(likedBooks));
+      setIsLiked(true);
+    }
   };
 
   const handleShare = () => {
-    console.log('Share clicked');
-    // TODO: Add your share logic here
+    if (navigator.share) {
+      navigator.share({
+        title: book.title,
+        text: `Check out "${book.title}" by ${book.author}`,
+        url: window.location.href,
+      }).catch((error) => console.log('Error sharing:', error));
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('Link copied to clipboard!');
+    }
   };
 
   const renderStars = (rating) => {
     const stars = [];
     const numRating = parseFloat(rating);
-    
+
     for (let i = 1; i <= 5; i++) {
-      if (i <= numRating) {
-        stars.push(<span key={i} className="text-yellow-400 text-xl">★</span>);
-      } else if (i - 0.5 <= numRating) {
-        stars.push(<span key={i} className="text-yellow-400 text-xl">⯨</span>);
-      } else {
-        stars.push(<span key={i} className="text-gray-300 text-xl">★</span>);
-      }
+      if (i <= numRating) stars.push(<span key={i} className="text-yellow-400 text-xl">★</span>);
+      else if (i - 0.5 <= numRating) stars.push(<span key={i} className="text-yellow-400 text-xl">⯨</span>);
+      else stars.push(<span key={i} className="text-gray-300 text-xl">★</span>);
     }
-    
     return stars;
   };
 
@@ -182,14 +130,14 @@ const BookDetail = () => {
     );
   }
 
-  if (!book) {
+  if (error || !book) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-gray-600 text-lg">Book not found</p>
-          <button 
+          <p className="text-gray-600 text-lg mb-4">{error || 'Book not found'}</p>
+          <button
             onClick={() => navigate('/home')}
-            className="mt-4 text-purple-600 hover:text-purple-700 font-medium"
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
           >
             Go back home
           </button>
@@ -200,8 +148,7 @@ const BookDetail = () => {
 
   return (
     <div className="min-h-screen bg-[#FFFFFF] pb-10 p-8">
-      {/* Back Button */}
-      <button 
+      <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 mb-6 text-gray-700 hover:text-gray-900 font-medium transition-colors"
       >
@@ -211,37 +158,26 @@ const BookDetail = () => {
 
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          {/* Book Header Section */}
           <div className="flex flex-col md:flex-row gap-8 p-8">
-            {/* Book Cover */}
             <div className="flex-shrink-0">
-              <img 
+              <img
                 src={book.cover || "https://via.placeholder.com/300x450?text=No+Cover"}
                 alt={book.title}
                 className="w-64 h-96 object-cover rounded-xl shadow-2xl"
-                onError={(e) => {
-                  e.target.src = "https://via.placeholder.com/300x450?text=No+Cover";
-                }}
+                onError={(e) => { e.target.src = "https://via.placeholder.com/300x450?text=No+Cover"; }}
               />
             </div>
 
-            {/* Book Info */}
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">
-                {book.title}
-              </h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-3">{book.title}</h1>
 
-              {/* Rating */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex items-center">
-                  {renderStars(book.rating)}
-                </div>
+                <div className="flex items-center">{renderStars(book.rating)}</div>
                 <span className="text-gray-600 font-medium">{book.rating}</span>
                 <span className="text-gray-400">•</span>
-                <span className="text-gray-600">{book.reviews || 1} Review{book.reviews !== 1 ? 's' : ''}</span>
+                <span className="text-gray-600">{book.reviews || 0} Review{book.reviews !== 1 ? 's' : ''}</span>
               </div>
 
-              {/* Metadata Grid */}
               <div className="grid grid-cols-2 gap-6 mb-6 bg-gray-50 rounded-xl p-6">
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Author</p>
@@ -252,54 +188,58 @@ const BookDetail = () => {
                   <p className="text-base font-semibold text-gray-900">{book.genre}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Producer</p>
-                  <p className="text-base font-semibold text-gray-900">{book.producer || 'Unknown'}</p>
+                  <p className="text-sm text-gray-500 mb-1">Publisher</p>
+                  <p className="text-base font-semibold text-gray-900">{book.publisher || 'Unknown'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Release status</p>
-                  <p className="text-base font-semibold text-gray-900">{book.releaseStatus || 'N/A'}</p>
+                  <p className="text-sm text-gray-500 mb-1">Published</p>
+                  <p className="text-base font-semibold text-gray-900">{book.pubYear || 'N/A'}</p>
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-wrap gap-3 mb-6">
-                <button 
+                <button
                   onClick={handleReadNow}
-                  className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors shadow-md hover:shadow-lg"
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors shadow-md hover:shadow-lg"
                 >
                   <FiBookOpen size={20} />
-                  Read
+                  Read Now
                 </button>
-                
-                <button 
+
+                <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 px-6 py-3 rounded-lg font-semibold transition-colors"
+                  className={`flex items-center gap-2 ${isSaved ? 'bg-purple-50 text-purple-600 border-purple-300' : 'bg-white text-gray-700 border-gray-300'} hover:bg-gray-50 border-2 px-6 py-3 rounded-lg font-semibold transition-colors`}
+                  title={isSaved ? 'Remove from saved' : 'Save book'}
                 >
                   {isSaved ? <BsBookmarkFill size={20} /> : <BsBookmark size={20} />}
+                  {isSaved ? 'Saved' : 'Save'}
                 </button>
-                
-                <button 
+
+                <button
                   onClick={handleLike}
                   className={`flex items-center gap-2 ${isLiked ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-gray-700 border-gray-300'} hover:bg-gray-50 border-2 px-6 py-3 rounded-lg font-semibold transition-colors`}
+                  title={isLiked ? 'Unlike' : 'Like'}
                 >
                   <FiHeart size={20} fill={isLiked ? 'currentColor' : 'none'} />
                 </button>
-                
-                <button 
+
+                <button
                   onClick={handleShare}
                   className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 px-6 py-3 rounded-lg font-semibold transition-colors"
+                  title="Share book"
                 >
                   <FiShare2 size={20} />
+                  Share
                 </button>
               </div>
 
-              {/* Description */}
               <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">About this book</h3>
                 <p className={`text-gray-700 leading-relaxed ${!showFullDesc ? 'line-clamp-4' : ''}`}>
-                  {book.desc}
+                  {book.desc || 'No description available.'}
                 </p>
                 {book.desc && book.desc.length > 200 && (
-                  <button 
+                  <button
                     onClick={() => setShowFullDesc(!showFullDesc)}
                     className="text-blue-500 hover:text-blue-600 font-medium mt-2"
                   >
@@ -310,10 +250,10 @@ const BookDetail = () => {
             </div>
           </div>
 
-          {/* Comments Section - Placeholder */}
+          {/* Comments Section */}
           <div className="border-t px-8 py-6 bg-gray-50">
             <h3 className="text-xl font-bold text-gray-900 mb-4">
-              Comment ({book.reviews || 0})
+              Comments ({book.reviews || 0})
             </h3>
             <div className="text-center py-8 text-gray-500">
               <p>Comments section coming soon...</p>
