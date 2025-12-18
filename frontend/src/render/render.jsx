@@ -36,9 +36,7 @@ const Render = () => {
         
         {/* Scrollable Page Content with top padding for navbar */}
         <main className="flex-1 overflow-y-auto pt-20">
-          <div className="p-4 sm:p-8">
             <Outlet context={{ searchQuery }} />
-          </div>
         </main>
       </div>
     </div>

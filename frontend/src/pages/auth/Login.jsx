@@ -14,6 +14,28 @@ const Login = () => {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Ensure user exists in MongoDB (for Google sign-in)
+  const ensureUserInMongoDB = async (firebaseUser) => {
+    try {
+      const response = await fetch('http://localhost:8090/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          email: firebaseUser.email,
+          favBooks: []
+        })
+      });
+      
+      if (response.ok) {
+        console.log('User ensured in MongoDB');
+      }
+    } catch (error) {
+      console.error('Error ensuring user in MongoDB:', error);
+    }
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
 
@@ -31,6 +53,7 @@ const Login = () => {
       setIsSigningIn(true);
       setErrorMessage('');
       await doSignInWithEmailAndPassword(email, password);
+      // User already exists in MongoDB from registration, no need to create again
     } catch (error) {
       setErrorMessage(error.message);
       setIsSigningIn(false);
@@ -42,7 +65,12 @@ const Login = () => {
     try {
       setIsSigningIn(true);
       setErrorMessage('');
-      await doSignInWithGoogle();
+      
+      const userCredential = await doSignInWithGoogle();
+      
+      // Ensure user exists in MongoDB (creates if first time, returns existing if already exists)
+      await ensureUserInMongoDB(userCredential.user);
+      
     } catch (error) {
       setErrorMessage(error.message);
       setIsSigningIn(false);
@@ -53,10 +81,8 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-4 sm:px-6">
-
       {/* Centered container */}
       <div className="relative w-full max-w-md sm:max-w-lg">
-
         {/* Grid background (soft edges) */}
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
@@ -73,15 +99,14 @@ const Login = () => {
 
         {/* Content */}
         <div className="relative px-6 sm:px-10 py-10 sm:py-12 text-center">
-
           {/* Logo placeholder */}
-         <div className="mb-8 flex justify-center">
-          <img
-            src={Logo}
-            alt="App Logo"
-            className="h-10 sm:h-12 w-auto object-contain"
-          />
-        </div>
+          <div className="mb-8 flex justify-center">
+            <img
+              src={Logo}
+              alt="App Logo"
+              className="h-10 sm:h-12 w-auto object-contain"
+            />
+          </div>
 
           {/* Heading */}
           <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">
@@ -167,7 +192,7 @@ const Login = () => {
           <button
             onClick={onGoogleSignIn}
             disabled={isSigningIn}
-            className="mt-5 w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 text-sm font-medium hover:bg-gray-50"
+            className="mt-5 w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white py-3 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             <FcGoogle className="text-lg" />
             Sign in with Google
@@ -175,7 +200,7 @@ const Login = () => {
 
           {/* Footer */}
           <p className="mt-8 text-sm text-gray-500">
-            Don’t have an account?{' '}
+            Don't have an account?{' '}
             <Link to="/register" className="text-purple-600 font-medium">
               Sign up
             </Link>
@@ -187,5 +212,3 @@ const Login = () => {
 };
 
 export default Login;
-
-

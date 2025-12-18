@@ -15,6 +15,36 @@ const Register = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+const createUserInMongoDB = async (firebaseUser) => {
+  try {
+    const response = await fetch('http://localhost:8090/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firebaseUid: firebaseUser.uid,
+        username: username || firebaseUser.email.split('@')[0],
+        email: firebaseUser.email
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText);
+    }
+
+    const mongoUser = await response.json();
+
+    // ✅ CRITICAL: STORE USER ID
+    localStorage.setItem("userId", mongoUser.id);
+
+    console.log("Mongo user synced:", mongoUser);
+
+  } catch (error) {
+    console.error("MongoDB user creation failed:", error);
+  }
+};
+
+
   const onSubmit = async (e) => {
     e.preventDefault();
 
@@ -36,7 +66,13 @@ const Register = () => {
     try {
       setIsRegistering(true);
       setErrorMessage('');
-      await doCreateUserWithEmailAndPassword(email, password);
+      
+      // Create user in Firebase
+      const userCredential = await doCreateUserWithEmailAndPassword(email, password);
+      
+      // Create user in MongoDB
+      await createUserInMongoDB(userCredential.user);
+      
     } catch (error) {
       setErrorMessage(error.message);
       setIsRegistering(false);
@@ -48,7 +84,13 @@ const Register = () => {
     try {
       setIsRegistering(true);
       setErrorMessage('');
-      await doSignInWithGoogle();
+      
+      // Sign in with Google
+      const userCredential = await doSignInWithGoogle();
+      
+      // Create user in MongoDB (will return existing if already exists)
+      await createUserInMongoDB(userCredential.user);
+      
     } catch (error) {
       setErrorMessage(error.message);
       setIsRegistering(false);
@@ -59,11 +101,7 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-4 sm:px-6">
-
-      {/* Centered container */}
       <div className="relative w-full max-w-md sm:max-w-lg">
-
-        {/* Grid background */}
         <div
           className="absolute inset-0 rounded-2xl pointer-events-none"
           style={{
@@ -77,10 +115,7 @@ const Register = () => {
           }}
         />
 
-        {/* Content */}
         <div className="relative px-6 sm:px-10 py-10 sm:py-12 text-center">
-
-          {/* Logo placeholder */}
           <div className="mb-8 flex justify-center">
            <img
              src={Logo}
@@ -89,7 +124,6 @@ const Register = () => {
            />                   
           </div>
 
-          {/* Heading */}
           <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">
             Create an account
           </h1>
@@ -97,7 +131,6 @@ const Register = () => {
             Choose a username and secure your account.
           </p>
 
-          {/* Google signup */}
           <button
             onClick={onGoogleSignIn}
             disabled={isRegistering}
@@ -107,17 +140,13 @@ const Register = () => {
             Sign up with Google
           </button>
 
-          {/* Divider */}
           <div className="my-8 flex items-center">
             <div className="flex-grow border-t border-gray-300" />
             <span className="mx-4 text-sm text-gray-500">OR</span>
             <div className="flex-grow border-t border-gray-300" />
           </div>
 
-          {/* Form */}
           <form onSubmit={onSubmit} className="text-left space-y-5">
-
-            {/* Username */}
             <div>
               <label className="text-sm font-medium text-gray-700">
                 Username
@@ -132,7 +161,6 @@ const Register = () => {
               />
             </div>
 
-            {/* Email */}
             <div>
               <label className="text-sm font-medium text-gray-700">
                 Email
@@ -148,7 +176,6 @@ const Register = () => {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label className="text-sm font-medium text-gray-700">
                 Password
@@ -167,7 +194,6 @@ const Register = () => {
               </p>
             </div>
 
-            {/* Confirm password */}
             <div>
               <label className="text-sm font-medium text-gray-700">
                 Confirm password
@@ -186,7 +212,6 @@ const Register = () => {
               <p className="text-sm text-red-600">{errorMessage}</p>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isRegistering}
@@ -196,7 +221,6 @@ const Register = () => {
             </button>
           </form>
 
-          {/* Footer */}
           <p className="mt-8 text-sm text-gray-500">
             Already have an account?{' '}
             <Link to="/login" className="text-purple-600 font-medium">

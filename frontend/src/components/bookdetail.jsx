@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiBookOpen, FiHeart, FiShare2 } from 'react-icons/fi';
+import { FiArrowLeft, FiBookOpen, FiShare2 } from 'react-icons/fi';
 import { BsBookmark, BsBookmarkFill } from 'react-icons/bs';
+import { useAuth } from '../authContext/index';
 
 const BookDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth(); // Get current user from Firebase
+  
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchBookDetails();
+    fetchComments();
     checkIfSaved();
     checkIfLiked();
   }, [id]);
@@ -40,9 +47,38 @@ const BookDetail = () => {
     }
   };
 
-  const checkIfSaved = () => {
-    const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
-    setIsSaved(savedBooks.some(b => b.id === id));
+  const fetchComments = async () => {
+    try {
+      const response = await fetch(`http://localhost:8090/api/coms/book/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setComments(data);
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+    }
+  };
+
+  // Check if book is saved in backend
+  const checkIfSaved = async () => {
+    if (!currentUser) {
+      // Fallback to localStorage if not logged in
+      const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
+      setIsSaved(savedBooks.some(b => b.id === id));
+      return;
+    }
+
+    try {
+      // Get user's favorite books from backend
+      const response = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
+      
+      if (response.ok) {
+        const user = await response.json();
+        setIsSaved(user.favBooks && user.favBooks.includes(id));
+      }
+    } catch (err) {
+      console.error('Error checking saved status:', err);
+    }
   };
 
   const checkIfLiked = () => {
@@ -51,16 +87,15 @@ const BookDetail = () => {
   };
 
   const handleReadNow = () => {
-    console.log('Read Now clicked for book ID:', id);
-    console.log('Book object:', book);
-    
-    // First save to history
+    // Save to history
     const history = JSON.parse(localStorage.getItem('history') || '[]');
     const bookForHistory = { 
       id: id,
       title: book.title,
       author: book.author,
       cover: book.cover,
+      genre: book.genre,
+      rating: book.rating,
       lastRead: new Date().toISOString() 
     };
 
@@ -72,25 +107,65 @@ const BookDetail = () => {
     navigate(`/read/${id}`);
   };
 
-  const handleSave = () => {
-    const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
+  // Updated handleSave to use backend API
+  const handleSave = async () => {
+    if (!currentUser) {
+      // Fallback to localStorage if not logged in
+      const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
 
-    if (isSaved) {
-      const filtered = savedBooks.filter(b => b.id !== id);
-      localStorage.setItem('savedBooks', JSON.stringify(filtered));
-      setIsSaved(false);
-    } else {
-      const bookForSave = { 
-        id: id,
-        title: book.title,
-        author: book.author,
-        cover: book.cover,
-        genre: book.genre,
-        savedAt: new Date().toISOString() 
-      };
-      savedBooks.push(bookForSave);
-      localStorage.setItem('savedBooks', JSON.stringify(savedBooks));
-      setIsSaved(true);
+      if (isSaved) {
+        const filtered = savedBooks.filter(b => b.id !== id);
+        localStorage.setItem('savedBooks', JSON.stringify(filtered));
+        setIsSaved(false);
+      } else {
+        const bookForSave = { 
+          id: id,
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+          genre: book.genre,
+          rating: book.rating,
+          savedAt: new Date().toISOString() 
+        };
+        savedBooks.push(bookForSave);
+        localStorage.setItem('savedBooks', JSON.stringify(savedBooks));
+        setIsSaved(true);
+      }
+      return;
+    }
+
+    try {
+      // Get user by Firebase UID
+      const userResponse = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
+      
+      if (!userResponse.ok) {
+        console.error('User not found in database');
+        return;
+      }
+
+      const user = await userResponse.json();
+
+      if (isSaved) {
+        // Remove from favorites
+        const response = await fetch(`http://localhost:8090/api/users/${user.id}/favbooks/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          setIsSaved(false);
+        }
+      } else {
+        // Add to favorites
+        const response = await fetch(`http://localhost:8090/api/users/${user.id}/favbooks/${id}`, {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          setIsSaved(true);
+        }
+      }
+    } catch (err) {
+      console.error('Error toggling save:', err);
     }
   };
 
@@ -107,7 +182,8 @@ const BookDetail = () => {
         title: book.title,
         author: book.author,
         cover: book.cover,
-        genre: book.genre
+        genre: book.genre,
+        rating: book.rating
       };
       likedBooks.push(bookForLike);
       localStorage.setItem('likedBooks', JSON.stringify(likedBooks));
@@ -125,6 +201,33 @@ const BookDetail = () => {
     } else {
       navigator.clipboard.writeText(window.location.href);
       alert('Link copied to clipboard!');
+    }
+  };
+
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const response = await fetch('http://localhost:8090/api/coms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookid: id,
+          text: newComment,
+          user: currentUser?.email || "Anonymous"
+        }),
+      });
+      
+      if (response.ok) {
+        setNewComment("");
+        fetchComments();
+      }
+    } catch (err) {
+      console.error('Error posting comment:', err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -237,14 +340,6 @@ const BookDetail = () => {
                 </button>
 
                 <button
-                  onClick={handleLike}
-                  className={`flex items-center gap-2 ${isLiked ? 'bg-red-50 text-red-600 border-red-300' : 'bg-white text-gray-700 border-gray-300'} hover:bg-gray-50 border-2 px-6 py-3 rounded-lg font-semibold transition-colors`}
-                  title={isLiked ? 'Unlike' : 'Like'}
-                >
-                  <FiHeart size={20} fill={isLiked ? 'currentColor' : 'none'} />
-                </button>
-
-                <button
                   onClick={handleShare}
                   className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 px-6 py-3 rounded-lg font-semibold transition-colors"
                   title="Share book"
@@ -272,12 +367,48 @@ const BookDetail = () => {
           </div>
 
           {/* Comments Section */}
-          <div className="border-t px-8 py-6 bg-gray-50">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
-              Comments ({book.reviews || 0})
+          <div className="border-t px-8 py-8 bg-gray-50">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">
+              Comments ({comments.length})
             </h3>
-            <div className="text-center py-8 text-gray-500">
-              <p>Comments section coming soon...</p>
+
+            {/* Comment Input Form */}
+            <form onSubmit={handleCommentSubmit} className="mb-8">
+              <textarea
+                className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none"
+                rows="3"
+                placeholder="Write your thoughts about this book..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+              ></textarea>
+              <div className="flex justify-end mt-2">
+                <button
+                  type="submit"
+                  disabled={submitting || !newComment.trim()}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 transition-colors"
+                >
+                  {submitting ? 'Posting...' : 'Post Comment'}
+                </button>
+              </div>
+            </form>
+
+            {/* Comments List */}
+            <div className="space-y-6">
+              {comments.length > 0 ? (
+                comments.map((com, index) => (
+                  <div key={com.id || index} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-purple-700">{com.user || "Anonymous"}</span>
+                      <span className="text-xs text-gray-400">Just now</span>
+                    </div>
+                    <p className="text-gray-700 leading-relaxed">{com.text}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10">
+                  <p className="text-gray-400 italic">No comments yet. Be the first to share your thoughts!</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

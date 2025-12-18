@@ -21,9 +21,8 @@ Content-Type: application/json
 GET {{baseUrl}}/books
 
 #
-## 3. Get Specific Book by ID
-# This uses the ID from the response of request 
-GET {{baseUrl}}/books/6941648aee8e625b359cf3a5
+### 3. Get Specific Book by ID
+GET {{baseUrl}}/books/694166b3ee8e625b359cf3ac
 
 
 # ================= COMS TESTS =================
@@ -33,10 +32,35 @@ POST {{baseUrl}}/coms
 Content-Type: application/json
 
 {
-  "bookid": "694388778b5ab55bed708926",
-  "text": "This API is working perfectly.",
-  "user": "DevUser"
+  "bookid": "694166b3ee8e625b359cf3ac",
+  "text": "Madhav pay me",
+  "user": "actual_dev33"
 }
 
 ### 5. Get All Coms
 GET {{baseUrl}}/coms
+
+### 3. Fetch comments by bookid
+GET {{baseUrl}}/coms/book/694397158b5ab55bed70892b
+Accept: application/json
+
+### Get user's favorite books
+GET {{baseUrl}}/users/69441637d3aa1450c897e434/favbooks
+Accept: application/json
+
+
+### Add book to favorites
+POST {{baseUrl}}/users/69441637d3aa1450c897e434/favbooks/6941648aee8e625b359cf3a5
+Accept: application/json
+
+
+### add a user
+POST {{baseUrl}}/users
+Content-Type: application/json
+
+{
+  "firebaseUid": "test123firebase",
+  "username": "testuser",
+  "email": "test@example.com",
+  "favBooks": []
+}
