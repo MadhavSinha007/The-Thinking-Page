@@ -5,10 +5,10 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import lombok.Data;
 
 @Data
-@Document(collection = "coms")
+@Document(collection = "Comments")
 public class Com {
     @Id
-    private String id;
-    private String message;
-    private String sender;
+    private String bookid;
+    private String text;
+    private String user;
 }

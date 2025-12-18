@@ -8,6 +8,7 @@ import Home from "./pages/home/home.jsx";
 import BookDetail from "./components/bookdetail.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
 import Profile from './pages/settings/Profile.jsx';
+import RenderPage from './pages/renderPage.jsx';
 
 const Router = () => {
   return (
@@ -26,6 +27,7 @@ const Router = () => {
             <Route path="saved" element={<Saved />} />
             <Route path="profile" element={<Profile />} />
             <Route path="book/:id" element={<BookDetail />} />
+            <Route path="read/:id" element={<RenderPage />} />
           </Route>
         </Route>
 

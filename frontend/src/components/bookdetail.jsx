@@ -51,29 +51,43 @@ const BookDetail = () => {
   };
 
   const handleReadNow = () => {
+    console.log('Read Now clicked for book ID:', id);
+    console.log('Book object:', book);
+    
+    // First save to history
     const history = JSON.parse(localStorage.getItem('history') || '[]');
-    const bookForHistory = { ...book, lastRead: new Date().toISOString() };
+    const bookForHistory = { 
+      id: id,
+      title: book.title,
+      author: book.author,
+      cover: book.cover,
+      lastRead: new Date().toISOString() 
+    };
 
-    const filteredHistory = history.filter(b => b.id !== book.id);
+    const filteredHistory = history.filter(b => b.id !== id);
     filteredHistory.unshift(bookForHistory);
     localStorage.setItem('history', JSON.stringify(filteredHistory.slice(0, 50)));
 
-    if (book.file) {
-      window.open(book.file, '_blank');
-    } else {
-      alert('Book file not available');
-    }
+    // Navigate to reader page
+    navigate(`/read/${id}`);
   };
 
   const handleSave = () => {
     const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
 
     if (isSaved) {
-      const filtered = savedBooks.filter(b => b.id !== book.id);
+      const filtered = savedBooks.filter(b => b.id !== id);
       localStorage.setItem('savedBooks', JSON.stringify(filtered));
       setIsSaved(false);
     } else {
-      const bookForSave = { ...book, savedAt: new Date().toISOString() };
+      const bookForSave = { 
+        id: id,
+        title: book.title,
+        author: book.author,
+        cover: book.cover,
+        genre: book.genre,
+        savedAt: new Date().toISOString() 
+      };
       savedBooks.push(bookForSave);
       localStorage.setItem('savedBooks', JSON.stringify(savedBooks));
       setIsSaved(true);
@@ -84,11 +98,18 @@ const BookDetail = () => {
     const likedBooks = JSON.parse(localStorage.getItem('likedBooks') || '[]');
 
     if (isLiked) {
-      const filtered = likedBooks.filter(b => b.id !== book.id);
+      const filtered = likedBooks.filter(b => b.id !== id);
       localStorage.setItem('likedBooks', JSON.stringify(filtered));
       setIsLiked(false);
     } else {
-      likedBooks.push(book);
+      const bookForLike = { 
+        id: id,
+        title: book.title,
+        author: book.author,
+        cover: book.cover,
+        genre: book.genre
+      };
+      likedBooks.push(bookForLike);
       localStorage.setItem('likedBooks', JSON.stringify(likedBooks));
       setIsLiked(true);
     }

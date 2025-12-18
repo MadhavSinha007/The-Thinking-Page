@@ -37,6 +37,5 @@ public class ThpApplication {
             System.out.println("----------------------------------------");
         };
     }
-    
 
 }

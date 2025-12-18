@@ -20,10 +20,10 @@ Content-Type: application/json
 ### 2. Get All Books
 GET {{baseUrl}}/books
 
-### 3. Get Specific Book by ID
-# This uses the ID from the response of request #1 automatically
-@bookId = {{createBookRequest.response.body.id}}
-GET {{baseUrl}}/books/{{bookId}}
+#
+## 3. Get Specific Book by ID
+# This uses the ID from the response of request 
+GET {{baseUrl}}/books/6941648aee8e625b359cf3a5
 
 
 # ================= COMS TESTS =================
@@ -33,9 +33,10 @@ POST {{baseUrl}}/coms
 Content-Type: application/json
 
 {
-  "message": "This API is working perfectly.",
-  "sender": "DevUser"
+  "bookid": "694388778b5ab55bed708926",
+  "text": "This API is working perfectly.",
+  "user": "DevUser"
 }
 
 ### 5. Get All Coms
-GET {{baseUrl}}/com
+GET {{baseUrl}}/coms

@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+
+.reader-content {
+  max-width: 65ch;
+  margin: auto;
+}
+
+.reader-content p {
+  font-variant-ligatures: common-ligatures;
+}
+
+.reader-content h1 {
+  font-size: 2.2em;
+}
+
+.reader-content h2 {
+  font-size: 1.6em;
+}
