@@ -34,7 +34,6 @@ const createUserInMongoDB = async (firebaseUser) => {
 
     const mongoUser = await response.json();
 
-    // ✅ CRITICAL: STORE USER ID
     localStorage.setItem("userId", mongoUser.id);
 
     console.log("Mongo user synced:", mongoUser);

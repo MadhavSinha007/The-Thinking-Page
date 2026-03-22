@@ -1,24 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FiHeart, FiTrash2 } from 'react-icons/fi';
 import { useAuth } from '../../authContext/index';
+import BookCard from '../../components/bookcard';
 
 const Save = () => {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
 
   const [savedBooks, setSavedBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mongoUserId, setMongoUserId] = useState(null);
 
-  // ================= GET MONGO USER =================
   useEffect(() => {
     if (!currentUser) {
       setLoading(false);
       return;
     }
-    console.log(currentUser.uid);
-    
+
     fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`)
       .then(res => res.json())
       .then(user => {
@@ -30,7 +27,6 @@ const Save = () => {
       });
   }, [currentUser]);
 
-  // ================= FETCH FAVORITES =================
   useEffect(() => {
     if (!mongoUserId) return;
 
@@ -41,7 +37,6 @@ const Save = () => {
       .finally(() => setLoading(false));
   }, [mongoUserId]);
 
-  // ================= REMOVE FAVORITE =================
   const handleRemoveBook = async (bookId) => {
     await fetch(
       `http://localhost:8090/api/users/${mongoUserId}/favbooks/${bookId}`,
@@ -53,7 +48,6 @@ const Save = () => {
     );
   };
 
-  // ================= LOADING =================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[500px]">
@@ -62,9 +56,9 @@ const Save = () => {
     );
   }
 
-  // ================= UI =================
   return (
-    <div className="w-full">
+    <div className="max-w-[1400px] mx-auto px-6 w-full">
+
       <h1 className="text-3xl font-bold mb-8">Saved Books</h1>
 
       {savedBooks.length === 0 ? (
@@ -73,33 +67,28 @@ const Save = () => {
           <p>No saved books yet</p>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-6">
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-6">
+
           {savedBooks.map(book => (
             <div key={book.id || book._id} className="relative group">
+
               <button
                 onClick={() => handleRemoveBook(book.id || book._id)}
-                className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100"
+                className="absolute top-2 right-2 z-10 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100"
               >
                 <FiTrash2 size={14} />
               </button>
 
-              <div onClick={() => navigate(`/book/${book.id || book._id}`)}>
-                <img
-                  src={book.cover}
-                  alt={book.title}
-                  className="rounded-xl shadow-lg"
-                />
-                <h3 className="mt-2 text-sm font-semibold">
-                  {book.title}
-                </h3>
-                <p className="text-xs text-gray-600">
-                  {book.author}
-                </p>
-              </div>
+              <BookCard book={book} />
+
             </div>
           ))}
+
         </div>
+
       )}
+
     </div>
   );
 };
