@@ -17,25 +17,21 @@ const Profile = () => {
   const [error, setError] = useState('');
   const [userId, setUserId] = useState(null);
 
-  // Fetch user profile on mount
   useEffect(() => {
-    if (currentUser) {
-      fetchUserProfile();
-    }
+    if (currentUser) fetchUserProfile();
   }, [currentUser]);
 
   const fetchUserProfile = async () => {
     try {
       setLoading(true);
       const response = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         setUsername(data.username);
         setEmail(data.email);
         setUserId(data.id);
       } else {
-        // Auto-create user if not found
         const createRes = await fetch("http://localhost:8090/api/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -50,229 +46,143 @@ const Profile = () => {
         setEmail(newUser.email);
         setUserId(newUser.id);
       }
-    } catch (err) {
-      setError('Failed to load profile: ' + err.message);
+    } catch {
+      setError('Failed to load profile');
     } finally {
       setLoading(false);
     }
   };
 
-  // Save username
   const saveUsername = async () => {
-    if (tempUsername.length < 3) {
-      setError('Username must be at least 3 characters');
-      return;
-    }
-
-    if (!userId) {
-      setError('User profile not found in database');
-      return;
-    }
-
+    if (tempUsername.length < 3) return setError('Min 3 characters');
     setSaving(true);
     setError('');
 
     try {
-      const response = await fetch(`http://localhost:8090/api/users/${userId}`, {
+      const res = await fetch(`http://localhost:8090/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: tempUsername })
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to update username');
-      }
+      if (!res.ok) throw new Error();
 
       setUsername(tempUsername);
       setIsEditing(false);
-    } catch (err) {
-      setError(err.message);
+    } catch {
+      setError('Update failed');
     } finally {
       setSaving(false);
     }
   };
 
-  // Logout
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to log out?')) {
-      await doSignOut();
-      navigate('/login');
-    }
+    await doSignOut();
+    navigate('/login');
   };
 
-  // Delete account
   const handleDeleteAccount = async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete your account? This action cannot be undone."
-      )
-    )
-      return;
-
-    if (
-      !window.confirm(
-        "This will permanently delete all your data including saved books and comments. Are you absolutely sure?"
-      )
-    )
-      return;
-
-    setError("");
+    if (!window.confirm('Delete account permanently?')) return;
 
     try {
-      // 1️⃣ Delete from MongoDB
       if (userId) {
-        const res = await fetch(`http://localhost:8090/api/users/${userId}`, {
-          method: "DELETE",
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText || "Failed to delete user from database");
-        }
+        await fetch(`http://localhost:8090/api/users/${userId}`, { method: 'DELETE' });
       }
-
-      // 2️⃣ Delete Firebase user
-      await currentUser.delete().catch((err) => {
-        if (err.code === "auth/requires-recent-login") {
-          throw new Error(
-            "You need to log in again before deleting your account. Please log out and log back in."
-          );
-        } else {
-          throw err;
-        }
-      });
-
-      // 3️⃣ Redirect
-      navigate("/register");
-    } catch (err) {
-      setError("Failed to delete account: " + err.message);
+      await currentUser.delete();
+      navigate('/register');
+    } catch {
+      setError('Delete failed');
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[500px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading profile...</p>
-        </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-purple-600 border-t-transparent rounded-full"></div>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Profile</h1>
-      <p className="text-gray-600 mb-8">Manage your account settings</p>
+    <div className="min-h-screen bg-gray-50 px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-3xl mx-auto">
 
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-8 py-12 text-center">
-          <div className="w-24 h-24 bg-white rounded-full mx-auto mb-4 flex items-center justify-center">
-            <FiUser className="text-purple-600" size={48} />
+        <div className="flex flex-col items-center text-center mb-10">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-r from-purple-600 to-purple-700 flex items-center justify-center mb-4 text-white">
+            <FiUser size={40} />
           </div>
-          <h2 className="text-2xl font-bold text-white">{username}</h2>
-          <p className="text-purple-100 text-sm mt-1">{email}</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">{username}</h1>
+          <p className="text-gray-500 text-sm mt-1">{email}</p>
         </div>
 
-        {/* Body */}
-        <div className="p-8 space-y-6">
+        {/* Card */}
+        <div className="bg-white shadow-xl border border-gray-200 rounded-2xl p-6 sm:p-8 space-y-6">
+
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
-              {error}
-            </div>
+            <div className="text-red-500 text-sm">{error}</div>
           )}
 
           {/* Username */}
           <div>
-            <label className="text-sm font-semibold text-gray-700 mb-2 block">Username</label>
+            <label className="text-sm text-gray-600">Username</label>
+
             {isEditing ? (
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-2">
                 <input
-                  type="text"
                   value={tempUsername}
                   onChange={(e) => setTempUsername(e.target.value)}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-purple-600 outline-none"
-                  disabled={saving}
-                  autoFocus
+                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-purple-600"
                 />
-                <button
-                  onClick={saveUsername}
-                  disabled={saving}
-                  className="p-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 transition"
-                  title="Save"
-                >
-                  <FiCheck size={20} />
+                <button onClick={saveUsername} className="p-2 bg-green-600 text-white rounded-lg">
+                  <FiCheck />
                 </button>
-                <button
-                  onClick={() => {
-                    setIsEditing(false);
-                    setError('');
-                  }}
-                  disabled={saving}
-                  className="p-3 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg disabled:opacity-50 transition"
-                  title="Cancel"
-                >
-                  <FiX size={20} />
+                <button onClick={() => setIsEditing(false)} className="p-2 bg-gray-200 rounded-lg">
+                  <FiX />
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <div className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-700 font-medium">
-                  {username}
-                </div>
-                <button
-                  onClick={() => {
-                    setTempUsername(username);
-                    setIsEditing(true);
-                    setError('');
-                  }}
-                  className="p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
-                  title="Edit username"
-                >
-                  <FiEdit2 size={20} />
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-lg text-gray-800">{username}</span>
+                <button onClick={() => { setTempUsername(username); setIsEditing(true); }} className="text-purple-600">
+                  <FiEdit2 />
                 </button>
               </div>
             )}
-            <p className="text-xs text-gray-500 mt-1">
-              Username must be at least 3 characters
-            </p>
           </div>
 
           {/* Email */}
           <div>
-            <label className="text-sm font-semibold text-gray-700 mb-2 block">Email Address</label>
-            <div className="flex items-center gap-3 rounded-lg border border-gray-300 bg-gray-50 px-4 py-3">
-              <FiMail className="text-gray-500" size={20} />
-              <span className="text-gray-700 font-medium">{email}</span>
+            <label className="text-sm text-gray-600">Email</label>
+            <div className="flex items-center gap-2 mt-2 text-gray-700">
+              <FiMail />
+              <span>{email}</span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
           </div>
 
-          {/* Account Actions */}
-          <div className="border-t pt-6 space-y-3">
+          {/* Actions */}
+          <div className="pt-4 space-y-3">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-semibold transition"
+              className="w-full py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 flex items-center justify-center gap-2"
             >
-              <FiLogOut size={20} />
-              Log Out
+              <FiLogOut /> Logout
             </button>
+
             <button
               onClick={handleDeleteAccount}
-              className="w-full flex items-center justify-center gap-3 bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-semibold transition"
+              className="w-full py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center gap-2"
             >
-              <FiTrash2 size={20} />
-              Delete Account
+              <FiTrash2 /> Delete Account
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Member Since */}
-      <div className="mt-6 text-center text-sm text-gray-500">
-        <p>Member since {new Date(currentUser?.metadata?.creationTime).toLocaleDateString()}</p>
+        {/* Footer */}
+        <div className="text-center text-gray-500 text-xs mt-6">
+          Member since {new Date(currentUser?.metadata?.creationTime).toLocaleDateString()}
+        </div>
+
       </div>
     </div>
   );
