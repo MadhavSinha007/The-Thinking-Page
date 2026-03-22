@@ -7,7 +7,7 @@ import { useAuth } from '../authContext/index';
 const BookDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth(); // Get current user from Firebase
+  const { currentUser } = useAuth();
   
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,24 +52,21 @@ const BookDetail = () => {
       const response = await fetch(`http://localhost:8090/api/coms/book/${id}`);
       if (response.ok) {
         const data = await response.json();
-        setComments(data);
+        setComments(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error('Error fetching comments:', err);
     }
   };
 
-  // Check if book is saved in backend
   const checkIfSaved = async () => {
     if (!currentUser) {
-      // Fallback to localStorage if not logged in
       const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
       setIsSaved(savedBooks.some(b => b.id === id));
       return;
     }
 
     try {
-      // Get user's favorite books from backend
       const response = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
       
       if (response.ok) {
@@ -87,7 +84,8 @@ const BookDetail = () => {
   };
 
   const handleReadNow = () => {
-    // Save to history
+    if (!book) return;
+
     const history = JSON.parse(localStorage.getItem('history') || '[]');
     const bookForHistory = { 
       id: id,
@@ -103,14 +101,13 @@ const BookDetail = () => {
     filteredHistory.unshift(bookForHistory);
     localStorage.setItem('history', JSON.stringify(filteredHistory.slice(0, 50)));
 
-    // Navigate to reader page
     navigate(`/read/${id}`);
   };
 
-  // Updated handleSave to use backend API
   const handleSave = async () => {
+    if (!book) return;
+
     if (!currentUser) {
-      // Fallback to localStorage if not logged in
       const savedBooks = JSON.parse(localStorage.getItem('savedBooks') || '[]');
 
       if (isSaved) {
@@ -135,7 +132,6 @@ const BookDetail = () => {
     }
 
     try {
-      // Get user by Firebase UID
       const userResponse = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
       
       if (!userResponse.ok) {
@@ -146,7 +142,6 @@ const BookDetail = () => {
       const user = await userResponse.json();
 
       if (isSaved) {
-        // Remove from favorites
         const response = await fetch(`http://localhost:8090/api/users/${user.id}/favbooks/${id}`, {
           method: 'DELETE'
         });
@@ -155,7 +150,6 @@ const BookDetail = () => {
           setIsSaved(false);
         }
       } else {
-        // Add to favorites
         const response = await fetch(`http://localhost:8090/api/users/${user.id}/favbooks/${id}`, {
           method: 'POST'
         });
@@ -170,6 +164,8 @@ const BookDetail = () => {
   };
 
   const handleLike = () => {
+    if (!book) return;
+
     const likedBooks = JSON.parse(localStorage.getItem('likedBooks') || '[]');
 
     if (isLiked) {
@@ -192,6 +188,8 @@ const BookDetail = () => {
   };
 
   const handleShare = () => {
+    if (!book) return;
+
     if (navigator.share) {
       navigator.share({
         title: book.title,
@@ -366,13 +364,11 @@ const BookDetail = () => {
             </div>
           </div>
 
-          {/* Comments Section */}
           <div className="border-t px-8 py-8 bg-gray-50">
             <h3 className="text-xl font-bold text-gray-900 mb-6">
               Comments ({comments.length})
             </h3>
 
-            {/* Comment Input Form */}
             <form onSubmit={handleCommentSubmit} className="mb-8">
               <textarea
                 className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none"
@@ -392,7 +388,6 @@ const BookDetail = () => {
               </div>
             </form>
 
-            {/* Comments List */}
             <div className="space-y-6">
               {comments.length > 0 ? (
                 comments.map((com, index) => (

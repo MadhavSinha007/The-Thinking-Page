@@ -19,13 +19,19 @@ const Render = () => {
 
   const handleSearch = (query) => {
     setSearchQuery(query);
+    // Navigate to home with search query if not already there
+    if (query.trim()) {
+      navigate(`/home?search=${encodeURIComponent(query)}`);
+    } else {
+      navigate('/home');
+    }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#FFFFFF]">
       {/* Fixed Sidebar */}
       <Sidebar />
-      
+
       {/* Content wrapper - Add left margin for sidebar */}
       <div className="flex flex-col flex-1 overflow-hidden ml-0 sm:ml-20">
         {/* Fixed Navbar */}
@@ -33,10 +39,10 @@ const Render = () => {
           onLogout={handleLogout} 
           onSearch={handleSearch}
         />
-        
+
         {/* Scrollable Page Content with top padding for navbar */}
         <main className="flex-1 overflow-y-auto pt-20">
-            <Outlet context={{ searchQuery }} />
+          <Outlet context={{ searchQuery }} />
         </main>
       </div>
     </div>

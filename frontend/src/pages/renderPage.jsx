@@ -411,5 +411,3 @@ const ReaderPage = () => {
 };
 
 export default ReaderPage;
-
-

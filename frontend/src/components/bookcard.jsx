@@ -49,4 +49,4 @@ const BookCard = ({ book }) => {
   );
 };
 
-export default BookCard;  
+export default BookCard;    
