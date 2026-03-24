@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { FiChevronRight } from "react-icons/fi";
 import BookCard from "./bookcard";
+import { useTheme } from "../context/ThemeContext";
 
 /* -------------------------------
    Section Component
 -------------------------------- */
-const BookSection = ({ title, books, onViewAll }) => {
+const BookSection = ({ title, books, onViewAll, darkMode }) => {
   if (!books || books.length === 0) return null;
 
   const displayBooks = books.slice(0, 7);
@@ -13,7 +14,9 @@ const BookSection = ({ title, books, onViewAll }) => {
   return (
     <div className="mb-12">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wide">
+        <h2 className={`text-lg font-bold uppercase tracking-wide ${
+          darkMode ? 'text-gray-300' : 'text-gray-900'
+        }`}>
           {title}
         </h2>
 
@@ -44,6 +47,7 @@ const BookSection = ({ title, books, onViewAll }) => {
    Main BookList
 -------------------------------- */
 const BookList = ({ searchQuery = "" }) => {
+  const { darkMode } = useTheme();
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedCategory, setExpandedCategory] = useState(null);
@@ -219,7 +223,7 @@ const BookList = ({ searchQuery = "" }) => {
   if (searchQuery.trim()) {
     return (
       <div className="mb-10">
-        <h2 className="text-2xl font-bold mb-6">
+        <h2 className={`text-2xl font-bold mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
           Search results for{" "}
           <span className="text-purple-600">"{searchQuery}"</span>
         </h2>
@@ -242,7 +246,9 @@ const BookList = ({ searchQuery = "" }) => {
     return (
       <div className="mb-12">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold uppercase">{category.title}</h2>
+          <h2 className={`text-lg font-bold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+            {category.title}
+          </h2>
 
           <button
             onClick={() => setExpandedCategory(null)}
@@ -273,6 +279,7 @@ const BookList = ({ searchQuery = "" }) => {
           title={cat.title}
           books={cat.books}
           onViewAll={() => setExpandedCategory(cat.key)}
+          darkMode={darkMode}
         />
       ))}
     </>

@@ -3,10 +3,12 @@ import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "../components/sidebar.jsx";
 import Navbar from "../components/navbar.jsx";
 import { doSignOut } from "../pages/auth/auth.js";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 const Render = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const { darkMode } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -28,7 +30,7 @@ const Render = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#FFFFFF]">
+    <div className={`flex h-screen overflow-hidden ${darkMode ? 'bg-[#0a0a0a]' : 'bg-[#faf9f8]'}`}>
       {/* Fixed Sidebar */}
       <Sidebar />
 
@@ -41,7 +43,9 @@ const Render = () => {
         />
 
         {/* Scrollable Page Content with top padding for navbar */}
-        <main className="flex-1 overflow-y-auto pt-20">
+        <main className={`flex-1 overflow-y-auto pt-20 ${
+          darkMode ? 'bg-[#0a0a0a]' : 'bg-[#faf9f8]'
+        }`}>
           <Outlet context={{ searchQuery }} />
         </main>
       </div>

@@ -1,11 +1,14 @@
 import React from "react";
 import Router from './Router';
 import { AuthProvider } from './authContext/index';
+import { ThemeProvider } from './context/ThemeContext'; // Correct path
 
 function App() {
   return (
     <AuthProvider>
-      <Router />
+      <ThemeProvider>
+        <Router />
+      </ThemeProvider>
     </AuthProvider>
   );
 }

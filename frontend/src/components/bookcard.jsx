@@ -1,21 +1,21 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 
 const BookCard = ({ book }) => {
   const navigate = useNavigate();
+  const { darkMode } = useTheme();
   const defaultCover = "https://via.placeholder.com/180x270?text=No+Cover";
   
   const handleClick = () => {
-    console.log('BookCard clicked! Book ID:', book.id);
-    console.log('Navigating to:', `/book/${book.id}`);
-    navigate(`/book/${book.id}`);
+    navigate(`/book/${book.id || book._id}`);
   };
   
   return (
     <div className="group cursor-pointer w-full" onClick={handleClick}>
       {/* Book Cover */}
       <div className="relative mb-3 overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300">
-        <div className="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200">
+        <div className={`aspect-[2/3] ${darkMode ? 'bg-[#1a1a1a]' : 'bg-gradient-to-br from-gray-100 to-gray-200'}`}>
           <img 
             src={book.cover || defaultCover}
             alt={book.title}
@@ -37,16 +37,18 @@ const BookCard = ({ book }) => {
       </div>
       
       {/* Book Title */}
-      <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-1.5 group-hover:text-purple-600 transition-colors leading-tight">
+      <h3 className={`text-sm font-semibold line-clamp-2 mb-1.5 transition-colors leading-tight ${
+        darkMode ? 'text-gray-200 group-hover:text-purple-400' : 'text-gray-900 group-hover:text-purple-600'
+      }`}>
         {book.title}
       </h3>
       
       {/* Author */}
-      <p className="text-xs text-gray-600 line-clamp-1 font-medium">
+      <p className={`text-xs line-clamp-1 font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
         {book.author}
       </p>
     </div>
   );
 };
 
-export default BookCard;    
+export default BookCard;

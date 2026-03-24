@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { FiClock, FiTrash2 } from 'react-icons/fi';
 import BookCard from '../../components/bookcard';
+import { useTheme } from '../../context/ThemeContext';
 
 const History = () => {
   const [historyBooks, setHistoryBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { darkMode } = useTheme();
 
   useEffect(() => {
     fetchHistory();
@@ -68,42 +70,36 @@ const History = () => {
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 w-full">
-
-      <h1 className="text-3xl font-bold mb-8">Reading History</h1>
+      <h1 className={`text-3xl font-bold mb-8 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+        Reading History
+      </h1>
 
       {historyBooks.length === 0 ? (
         <div className="text-center py-20">
-          <FiClock className="mx-auto text-gray-400 mb-4" size={64} />
-          <p>No reading history yet</p>
+          <FiClock className={`mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} size={64} />
+          <p className={darkMode ? 'text-gray-500' : 'text-gray-500'}>No reading history yet</p>
         </div>
       ) : (
-
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-6">
-
           {historyBooks.map(book => (
             <div key={book._id} className="relative group">
-
               <button
                 onClick={() => handleRemoveBook(book._id)}
-                className="absolute top-2 right-2 z-10 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100"
+                className="absolute top-2 right-2 z-10 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <FiTrash2 size={14} />
               </button>
 
               <BookCard book={book} />
 
-              <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+              <p className={`text-xs flex items-center gap-1 mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                 <FiClock size={12} />
                 {formatDate(book.lastRead)}
               </p>
-
             </div>
           ))}
-
         </div>
-
       )}
-
     </div>
   );
 };
