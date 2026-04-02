@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
-import KindleReader from "../../components/KindleReader";
+import KindleReader from "../../components/KindleReader/KindleReader";
 
 const BookReaderPage = () => {
   const { id } = useParams();
