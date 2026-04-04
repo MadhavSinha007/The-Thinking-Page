@@ -1,27 +1,26 @@
 import React, { useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import Sidebar from "../components/sidebar.jsx";
-import Navbar from "../components/navbar.jsx";
-import { doSignOut } from "../pages/auth/auth.js";
-import { useTheme } from "../context/ThemeContext.jsx";
+import Sidebar from "../components/sidebar";
+import Navbar from "../components/navbar";
+import { doSignOut } from "../pages/auth/auth";
+import { useTheme } from "../context/ThemeContext";
 
 const Render = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const { darkMode } = useTheme();
+  const { theme } = useTheme();
 
   const handleLogout = async () => {
     try {
       await doSignOut();
       navigate("/login");
-    } catch (error) {
-      console.error("Error logging out:", error);
+    } catch (err) {
+      console.error("Logout error:", err);
     }
   };
 
   const handleSearch = (query) => {
     setSearchQuery(query);
-    // Navigate to home with search query if not already there
     if (query.trim()) {
       navigate(`/home?search=${encodeURIComponent(query)}`);
     } else {
@@ -30,23 +29,24 @@ const Render = () => {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden ${darkMode ? 'bg-[#0a0a0a]' : 'bg-[#faf9f8]'}`}>
-      {/* Fixed Sidebar */}
+    <div className="flex h-screen overflow-hidden" style={{ background: theme.bg }}>
+      {/* Sidebar */}
       <Sidebar />
 
-      {/* Content wrapper - Add left margin for sidebar */}
-      <div className="flex flex-col flex-1 overflow-hidden ml-0 sm:ml-20">
-        {/* Fixed Navbar */}
-        <Navbar 
-          onLogout={handleLogout} 
-          onSearch={handleSearch}
-        />
+      {/* Main column */}
+      <div className="flex flex-col flex-1 overflow-hidden sm:ml-[72px]">
+        {/* Navbar */}
+        <Navbar onLogout={handleLogout} onSearch={handleSearch} />
 
-        {/* Scrollable Page Content with top padding for navbar */}
-        <main className={`flex-1 overflow-y-auto pt-20 ${
-          darkMode ? 'bg-[#0a0a0a]' : 'bg-[#faf9f8]'
-        }`}>
-          <Outlet context={{ searchQuery }} />
+        {/* Page content */}
+        <main
+          className="flex-1 overflow-y-auto pt-[60px]"
+          style={{ background: theme.bg }}
+          // Extra bottom padding on mobile for the bottom nav
+        >
+          <div className="pb-24 sm:pb-8">
+            <Outlet context={{ searchQuery }} />
+          </div>
         </main>
       </div>
     </div>

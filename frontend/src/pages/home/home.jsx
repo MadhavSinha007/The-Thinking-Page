@@ -6,11 +6,7 @@ const Home = () => {
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
 
-  return (
-    <div className="max-w-[1400px] mx-auto px-6 w-full">
-      <BookList searchQuery={searchQuery} />
-    </div>
-  );
+  return <BookList searchQuery={searchQuery} />;
 };
 
 export default Home;

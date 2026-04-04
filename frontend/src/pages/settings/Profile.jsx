@@ -6,213 +6,199 @@ import { FiUser, FiMail, FiEdit2, FiCheck, FiX, FiLogOut, FiTrash2 } from 'react
 import { useTheme } from '../../context/ThemeContext';
 
 const Profile = () => {
-  const { currentUser } = useAuth();
-  const navigate = useNavigate();
-  const { darkMode } = useTheme();
+  const { currentUser }                     = useAuth();
+  const navigate                            = useNavigate();
+  const { theme }                           = useTheme();
 
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [tempUsername, setTempUsername] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [userId, setUserId] = useState(null);
+  const [username, setUsername]             = useState('');
+  const [email, setEmail]                   = useState('');
+  const [tempUsername, setTempUsername]     = useState('');
+  const [isEditing, setIsEditing]           = useState(false);
+  const [loading, setLoading]               = useState(true);
+  const [saving, setSaving]                 = useState(false);
+  const [error, setError]                   = useState('');
+  const [userId, setUserId]                 = useState(null);
 
-  useEffect(() => {
-    if (currentUser) fetchUserProfile();
-  }, [currentUser]);
+  useEffect(() => { if (currentUser) fetchUserProfile(); }, [currentUser]);
 
   const fetchUserProfile = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
-
-      if (response.ok) {
-        const data = await response.json();
-        setUsername(data.username);
-        setEmail(data.email);
-        setUserId(data.id);
+      const res = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsername(data.username); setEmail(data.email); setUserId(data.id);
       } else {
         const createRes = await fetch("http://localhost:8090/api/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            firebaseUid: currentUser.uid,
-            username: currentUser.displayName || currentUser.email.split("@")[0],
-            email: currentUser.email
-          })
+          body: JSON.stringify({ firebaseUid: currentUser.uid, username: currentUser.displayName || currentUser.email.split("@")[0], email: currentUser.email }),
         });
-        const newUser = await createRes.json();
-        setUsername(newUser.username);
-        setEmail(newUser.email);
-        setUserId(newUser.id);
+        const u = await createRes.json();
+        setUsername(u.username); setEmail(u.email); setUserId(u.id);
       }
-    } catch {
-      setError('Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError('Failed to load profile'); }
+    finally { setLoading(false); }
   };
 
   const saveUsername = async () => {
     if (tempUsername.length < 3) return setError('Min 3 characters');
-    setSaving(true);
-    setError('');
-
+    setSaving(true); setError('');
     try {
       const res = await fetch(`http://localhost:8090/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: tempUsername })
+        body: JSON.stringify({ username: tempUsername }),
       });
-
       if (!res.ok) throw new Error();
-
-      setUsername(tempUsername);
-      setIsEditing(false);
-    } catch {
-      setError('Update failed');
-    } finally {
-      setSaving(false);
-    }
+      setUsername(tempUsername); setIsEditing(false);
+    } catch { setError('Update failed'); }
+    finally { setSaving(false); }
   };
 
-  const handleLogout = async () => {
-    await doSignOut();
-    navigate('/login');
-  };
+  const handleLogout = async () => { await doSignOut(); navigate('/login'); };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm('Delete account permanently?')) return;
-
+    if (!window.confirm('Delete your account permanently?')) return;
     try {
-      if (userId) {
-        await fetch(`http://localhost:8090/api/users/${userId}`, { method: 'DELETE' });
-      }
+      if (userId) await fetch(`http://localhost:8090/api/users/${userId}`, { method: 'DELETE' });
       await currentUser.delete();
       navigate('/register');
-    } catch {
-      setError('Delete failed');
-    }
+    } catch { setError('Delete failed'); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[500px]">
-        <div className="animate-spin h-12 w-12 border-4 border-purple-600 border-t-transparent rounded-full"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="w-10 h-10 rounded-full border-[3px] animate-spin"
+        style={{ borderColor: theme.border, borderTopColor: theme.accent }} />
+    </div>
+  );
+
+  // Avatar initials
+  const initials = (username || email || 'R').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`min-h-screen px-4 sm:px-6 lg:px-8 py-10 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-[#faf9f8]'}`}>
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen pb-16" style={{ background: theme.bg }}>
+      <div className="max-w-lg mx-auto px-5 sm:px-8 pt-8">
+
+        {/* Avatar + name */}
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-r from-purple-600 to-purple-700 flex items-center justify-center mb-4 text-white">
-            <FiUser size={40} />
+          <div
+            className="w-24 h-24 rounded-3xl flex items-center justify-center mb-5 text-2xl font-black"
+            style={{ background: theme.fg, color: theme.bg }}
+          >
+            {initials}
           </div>
-          <h1 className={`text-2xl sm:text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-            {username}
-          </h1>
-          <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {email}
+          <h1 className="text-2xl font-bold mb-1" style={{ color: theme.fg }}>{username}</h1>
+          <p className="text-sm" style={{ color: theme.fgMuted }}>{email}</p>
+          <p className="text-xs mt-1" style={{ color: theme.fgSubtle }}>
+            Member since {new Date(currentUser?.metadata?.creationTime).toLocaleDateString()}
           </p>
         </div>
 
         {/* Card */}
-        <div className={`shadow-xl border rounded-2xl p-6 sm:p-8 space-y-6 ${
-          darkMode 
-            ? 'bg-[#0a0a0a] border-gray-800' 
-            : 'bg-white border-gray-200'
-        }`}>
+        <div
+          className="rounded-3xl p-6 sm:p-8 space-y-6"
+          style={{ background: theme.surface, border: `1px solid ${theme.border}` }}
+        >
           {error && (
-            <div className="text-red-500 text-sm">{error}</div>
+            <div
+              className="text-sm px-4 py-3 rounded-xl"
+              style={{ background: '#FEE2E2', color: '#DC2626' }}
+            >
+              {error}
+            </div>
           )}
 
-          {/* Username */}
+          {/* Username field */}
           <div>
-            <label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <label className="block text-xs font-bold uppercase tracking-widest mb-3" style={{ color: theme.fgSubtle }}>
               Username
             </label>
-
             {isEditing ? (
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2">
                 <input
                   value={tempUsername}
-                  onChange={(e) => setTempUsername(e.target.value)}
-                  className={`flex-1 border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-purple-600 ${
-                    darkMode 
-                      ? 'bg-[#1a1a1a] border-gray-700 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+                  onChange={e => setTempUsername(e.target.value)}
+                  className="flex-1 px-4 py-2.5 rounded-2xl text-sm font-medium outline-none transition-all"
+                  style={{
+                    background: theme.surface2,
+                    border: `1.5px solid ${theme.accent}`,
+                    color: theme.fg,
+                  }}
+                  autoFocus
                 />
-                <button 
-                  onClick={saveUsername} 
+                <button
+                  onClick={saveUsername}
                   disabled={saving}
-                  className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center text-white"
+                  style={{ background: '#22C55E' }}
                 >
-                  <FiCheck />
+                  <FiCheck size={16} />
                 </button>
-                <button 
-                  onClick={() => setIsEditing(false)} 
-                  className={`p-2 rounded-lg transition ${
-                    darkMode 
-                      ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' 
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                  }`}
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center"
+                  style={{ background: theme.surface2, color: theme.fgMuted }}
                 >
-                  <FiX />
+                  <FiX size={16} />
                 </button>
               </div>
             ) : (
-              <div className="flex justify-between items-center mt-2">
-                <span className={`text-lg ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                  {username}
-                </span>
-                <button 
-                  onClick={() => { setTempUsername(username); setIsEditing(true); }} 
-                  className="text-purple-600 hover:text-purple-700 transition"
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold" style={{ color: theme.fg }}>{username}</span>
+                <button
+                  onClick={() => { setTempUsername(username); setIsEditing(true); }}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
+                  style={{ color: theme.accent, background: theme.accentSoft }}
                 >
-                  <FiEdit2 />
+                  <FiEdit2 size={15} />
                 </button>
               </div>
             )}
           </div>
 
-          {/* Email */}
+          {/* Divider */}
+          <div style={{ borderTop: `1px solid ${theme.border}` }} />
+
+          {/* Email field */}
           <div>
-            <label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <label className="block text-xs font-bold uppercase tracking-widest mb-3" style={{ color: theme.fgSubtle }}>
               Email
             </label>
-            <div className={`flex items-center gap-2 mt-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              <FiMail />
-              <span>{email}</span>
+            <div className="flex items-center gap-2.5">
+              <FiMail size={15} style={{ color: theme.fgMuted, flexShrink: 0 }} />
+              <span className="text-sm font-medium" style={{ color: theme.fgMuted }}>{email}</span>
             </div>
           </div>
 
+          {/* Divider */}
+          <div style={{ borderTop: `1px solid ${theme.border}` }} />
+
           {/* Actions */}
-          <div className="pt-4 space-y-3">
+          <div className="flex flex-col gap-3 pt-2">
             <button
               onClick={handleLogout}
-              className="w-full py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 flex items-center justify-center gap-2 transition"
+              className="w-full py-3 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all"
+              style={{ background: theme.accent }}
+              onMouseEnter={e => (e.currentTarget.style.background = theme.accentHover)}
+              onMouseLeave={e => (e.currentTarget.style.background = theme.accent)}
             >
-              <FiLogOut /> Logout
+              <FiLogOut size={16} />
+              Logout
             </button>
 
             <button
               onClick={handleDeleteAccount}
-              className="w-full py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center gap-2 transition"
+              className="w-full py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all border-2"
+              style={{ color: '#EF4444', borderColor: '#EF4444', background: 'transparent' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#EF4444'; e.currentTarget.style.color = '#fff'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#EF4444'; }}
             >
-              <FiTrash2 /> Delete Account
+              <FiTrash2 size={16} />
+              Delete Account
             </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className={`text-center text-xs mt-6 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-          Member since {new Date(currentUser?.metadata?.creationTime).toLocaleDateString()}
         </div>
       </div>
     </div>

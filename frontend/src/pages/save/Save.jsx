@@ -1,87 +1,80 @@
 import React, { useState, useEffect } from 'react';
-import { FiHeart, FiTrash2 } from 'react-icons/fi';
+import { FiBookmark, FiTrash2 } from 'react-icons/fi';
 import { useAuth } from '../../authContext/index';
 import BookCard from '../../components/bookcard';
 import { useTheme } from '../../context/ThemeContext';
 
 const Save = () => {
   const { currentUser } = useAuth();
-  const { darkMode } = useTheme();
-
+  const { theme } = useTheme();
   const [savedBooks, setSavedBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mongoUserId, setMongoUserId] = useState(null);
 
   useEffect(() => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-
+    if (!currentUser) { setLoading(false); return; }
     fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`)
-      .then(res => res.json())
-      .then(user => {
-        setMongoUserId(user.id || user._id);
-      })
-      .catch(err => {
-        console.error("User mapping failed", err);
-        setLoading(false);
-      });
+      .then(r => r.json())
+      .then(user => setMongoUserId(user.id || user._id))
+      .catch(() => setLoading(false));
   }, [currentUser]);
 
   useEffect(() => {
     if (!mongoUserId) return;
-
     fetch(`http://localhost:8090/api/users/${mongoUserId}/favbooks`)
-      .then(res => res.json())
-      .then(data => setSavedBooks(data))
-      .catch(err => console.error(err))
+      .then(r => r.json())
+      .then(setSavedBooks)
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, [mongoUserId]);
 
-  const handleRemoveBook = async (bookId) => {
-    await fetch(
-      `http://localhost:8090/api/users/${mongoUserId}/favbooks/${bookId}`,
-      { method: "DELETE" }
-    );
-
-    setSavedBooks(prev =>
-      prev.filter(b => (b.id || b._id) !== bookId)
-    );
+  const handleRemove = async (bookId) => {
+    await fetch(`http://localhost:8090/api/users/${mongoUserId}/favbooks/${bookId}`, { method: 'DELETE' });
+    setSavedBooks(prev => prev.filter(b => (b.id || b._id) !== bookId));
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[500px]">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600" />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div
+          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+          style={{ borderColor: theme.border, borderTopColor: theme.accent }}
+        />
       </div>
     );
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 w-full">
-      <h1 className={`text-3xl font-bold mb-8 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+    <div className="max-w-7xl mx-auto px-5 sm:px-8 pt-8">
+      <h1 className="text-2xl font-bold mb-8" style={{ color: theme.fg }}>
         Saved Books
       </h1>
 
       {savedBooks.length === 0 ? (
-        <div className="text-center py-20">
-          <FiHeart size={64} className={`mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
-          <p className={darkMode ? 'text-gray-500' : 'text-gray-500'}>No saved books yet</p>
+        <div className="flex flex-col items-center py-24 gap-4">
+          <FiBookmark size={48} style={{ color: theme.fgSubtle }} />
+          <p className="text-sm" style={{ color: theme.fgMuted }}>
+            No saved books yet
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-6">
-          {savedBooks.map(book => (
-            <div key={book.id || book._id} className="relative group">
-              <button
-                onClick={() => handleRemoveBook(book.id || book._id)}
-                className="absolute top-2 right-2 z-10 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <FiTrash2 size={14} />
-              </button>
-              <BookCard book={book} />
-            </div>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
+          {savedBooks.map(book => {
+            const bid = book.id || book._id;
+            return (
+              <div key={bid} className="relative group">
+                <button
+                  onClick={() => handleRemove(bid)}
+                  className="absolute top-2 left-2 z-10 w-7 h-7 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all shadow-md"
+                  style={{ background: '#EF4444' }}
+                >
+                  <FiTrash2 size={13} />
+                </button>
+
+                <BookCard book={book} />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

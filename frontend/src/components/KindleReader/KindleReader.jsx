@@ -1,467 +1,736 @@
+/**
+ * KindleReader.jsx — Fixed & Enhanced
+ *
+ * Fixes:
+ *  - Theme/font/size/line-height settings now actually apply (injects <style> into epub iframe)
+ *  - Two-column layout on desktop (≥1024px)
+ *  - Synced with site ThemeContext (sepia/dark/light)
+ *  - Overall design polish
+ *
+ * Props:
+ *   bookUrl  — URL to the .epub file
+ *   onClose  — optional back callback
+ *
+ * npm install epubjs
+ * Paste your ElevenLabs key below.
+ */
+
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import ePub from "epubjs";
 import { useTheme } from "../../context/ThemeContext";
-import { speakText, stopAudio } from "../../utils/ElevenLabsReader";
 
-// ── Breakpoint for two-column spread ─────────────────────────────────
-const TWO_COL_MIN = 768; // px
+// ─── ElevenLabs ───────────────────────────────────────────
+const ELEVENLABS_API_KEY = "YOUR_API_KEY";
+const VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+const TTS_MODEL = "eleven_turbo_v2";
 
-// ── epub.js theme definitions (pure light / pure dark) ───────────────
-const EPUB_LIGHT = {
-  body: {
-    background:   "#ffffff",
-    color:        "#111111",
-    "font-family":"Georgia, 'Times New Roman', serif",
-    "font-size":  "1rem",
-    "line-height":"1.8",
-    "text-align": "justify",
-    padding:      "32px 40px",
-  },
-  p: { "text-indent": "1.4em", "margin-bottom": "0.7em" },
-  "h1,h2,h3,h4": { "font-weight": "600", "text-indent": "0", "margin-bottom": "0.5em" },
-  a: { color: "#0066cc" },
-  blockquote: { "border-left": "3px solid #ccc", padding: "0 1em", "font-style": "italic", color: "#555" },
+// ─── Reader themes (for the reading area only) ────────────
+const READER_THEMES = {
+  light: { name: "Light",  bg: "#faf9f8", fg: "#1a1714", accent: "#7c3aed", scrollbar: "#d4d0cb" },
+  dark:  { name: "Dark",   bg: "#0f0f0f", fg: "#d8d4cf", accent: "#7c3aed", scrollbar: "#2a2a2a" },
+  sepia: { name: "Sepia",  bg: "#f5ede0", fg: "#3a2e22", accent: "#9c4a1a", scrollbar: "#d4c5ae" },
+  sand:  { name: "Sand",   bg: "#f2f0eb", fg: "#2c2825", accent: "#7c3aed", scrollbar: "#ccc8c2" },
 };
 
-const EPUB_DARK = {
-  body: {
-    background:   "#121212",
-    color:        "#e0e0e0",
-    "font-family":"Georgia, 'Times New Roman', serif",
-    "font-size":  "1rem",
-    "line-height":"1.8",
-    "text-align": "justify",
-    padding:      "32px 40px",
-  },
-  p: { "text-indent": "1.4em", "margin-bottom": "0.7em" },
-  "h1,h2,h3,h4": { "font-weight": "600", "text-indent": "0", "margin-bottom": "0.5em", color: "#e0e0e0" },
-  a: { color: "#66aaff" },
-  blockquote: { "border-left": "3px solid #444", padding: "0 1em", "font-style": "italic", color: "#aaa" },
+const FONT_SIZES = [13, 15, 17, 19, 21, 24];
+const FONTS = [
+  { label: "Georgia",      value: "Georgia, 'Times New Roman', serif" },
+  { label: "Palatino",     value: "'Palatino Linotype', Palatino, Georgia, serif" },
+  { label: "Garamond",     value: "'EB Garamond', 'Garamond', Georgia, serif" },
+  { label: "Merriweather", value: "'Merriweather', Georgia, serif" },
+  { label: "Sans",         value: "system-ui, -apple-system, 'Segoe UI', sans-serif" },
+];
+
+// ─── TTS ──────────────────────────────────────────────────
+let _ttsAudio = null;
+let _ttsAbort = false;
+
+const stopTTS = () => {
+  _ttsAbort = true;
+  if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio.src = ""; _ttsAudio = null; }
 };
 
-// ── UI tokens — only light / dark, matching your app's existing theme ─
-const UI = {
-  light: {
-    bg:      "#ffffff",
-    bar:     "rgba(255,255,255,0.96)",
-    border:  "rgba(0,0,0,0.10)",
-    text:    "#111111",
-    muted:   "#888888",
-    accent:  "#0066cc",
-    shadow:  "rgba(0,0,0,0.12)",
-  },
-  dark: {
-    bg:      "#121212",
-    bar:     "rgba(18,18,18,0.96)",
-    border:  "rgba(255,255,255,0.08)",
-    text:    "#e0e0e0",
-    muted:   "#666666",
-    accent:  "#66aaff",
-    shadow:  "rgba(0,0,0,0.5)",
-  },
+const chunkText = (text, max = 400) => {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  const sentences = cleaned.match(/[^.!?]+[.!?]+["']?|[^.!?]+$/g) || [cleaned];
+  const chunks = []; let cur = "";
+  for (const s of sentences) {
+    const t = s.trim(); if (!t) continue;
+    if (cur.length + t.length > max && cur.length > 0) { chunks.push(cur.trim()); cur = t + " "; }
+    else cur += t + " ";
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
 };
 
-// ── Animated sound wave icon ─────────────────────────────────────────
-const SoundWave = ({ color }) => (
-  <>
-    <style>{`@keyframes sw{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}`}</style>
-    <span style={{ display:"inline-flex", gap:"2px", alignItems:"center" }}>
-      {[1,2,3,2,1].map((d,i) => (
-        <span key={i} style={{
-          display:"inline-block", width:"2px", borderRadius:"2px",
-          height:`${d*4}px`, background:color,
-          animation:`sw ${0.5+i*0.1}s ease-in-out infinite`,
-          animationDelay:`${i*0.07}s`,
-        }}/>
-      ))}
-    </span>
-  </>
+const fetchBlob = async (text) => {
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
+    {
+      method: "POST",
+      headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text, model_id: TTS_MODEL, voice_settings: { stability: 0.35, similarity_boost: 0.8, style: 0.45, use_speaker_boost: true } }),
+    }
+  );
+  if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
+  return res.blob();
+};
+
+const playBlob = (blob) =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _ttsAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); reject(); };
+    audio.play().catch(reject);
+  });
+
+const speakText = async (text, onDone) => {
+  if (!ELEVENLABS_API_KEY || ELEVENLABS_API_KEY === "YOUR_API_KEY") { onDone?.(); return; }
+  stopTTS(); _ttsAbort = false;
+  try {
+    for (const chunk of chunkText(text)) {
+      if (_ttsAbort) break;
+      const blob = await fetchBlob(chunk);
+      if (_ttsAbort) break;
+      await playBlob(blob);
+    }
+  } catch (e) { console.error("TTS:", e); }
+  finally { _ttsAudio = null; if (!_ttsAbort) onDone?.(); }
+};
+
+// ─── Core style injector — works reliably across epub.js versions ──
+const buildCss = (rt, font, size, lh) => `
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap');
+  
+  html, body {
+    background: ${rt.bg} !important;
+    color: ${rt.fg} !important;
+    font-family: ${font.value} !important;
+    font-size: ${size}px !important;
+    line-height: ${lh} !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    max-width: 640px !important;
+    margin: 0 auto !important;
+    padding: 1.8em 1.5em 2.5em !important;
+    box-sizing: border-box !important;
+  }
+  p {
+    font-family: ${font.value} !important;
+    font-size: ${size}px !important;
+    line-height: ${lh} !important;
+    color: ${rt.fg} !important;
+    text-align: justify !important;
+    margin-bottom: 0.8em !important;
+    text-indent: 1.4em !important;
+    hyphens: auto !important;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: ${font.value} !important;
+    color: ${rt.fg} !important;
+    text-indent: 0 !important;
+    line-height: 1.3 !important;
+    margin-top: 1.5em !important;
+    margin-bottom: 0.6em !important;
+  }
+  a { color: ${rt.accent} !important; text-decoration: none !important; }
+  img { max-width: 100% !important; height: auto !important; }
+  * { box-sizing: border-box !important; }
+`;
+
+const injectStyle = (rend, css) => {
+  try {
+    // Method 1: getContents API (works with most epub.js versions)
+    const contents = rend.getContents?.();
+    if (contents && contents.length > 0) {
+      contents.forEach(c => {
+        const doc = c.document || c.window?.document;
+        if (!doc) return;
+        let el = doc.getElementById('__kindle_style__');
+        if (!el) {
+          el = doc.createElement('style');
+          el.id = '__kindle_style__';
+          doc.head.appendChild(el);
+        }
+        el.textContent = css;
+      });
+      return;
+    }
+  } catch (_) {}
+
+  try {
+    // Method 2: Use themes.default (epub.js v0.3+)
+    rend.themes.default({ body: {} }); // reset
+    rend.themes.override('body', {
+      'background': 'transparent',
+      'font-size': '16px',
+    });
+  } catch (_) {}
+};
+
+// ─── Icons ─────────────────────────────────────────────────
+const Ico = ({ d, size = 20, fill = "none" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill}
+    stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
 );
+const IBack  = () => <Ico d="M19 12H5M12 5l-7 7 7 7" />;
+const IToc   = () => <Ico d="M4 6h16M4 12h16M4 18h10" />;
+const ISet   = () => <Ico size={18} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />;
+const IPlay  = () => <Ico size={14} d="M5 3l14 9-14 9V3z" fill="currentColor" />;
+const IPause = () => <Ico size={14} d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor" />;
+const ILeft  = () => <Ico d="M15 18l-6-6 6-6" />;
+const IRight = () => <Ico d="M9 18l6-6-6-6" />;
+const IClose = () => <Ico size={16} d="M18 6L6 18M6 6l12 12" />;
+const ICols  = () => <Ico size={16} d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M9 3v18M15 3v18" />;
 
-export default function KindleReader({ bookUrl }) {
-  const viewerRef    = useRef(null);
-  const renditionRef = useRef(null);
-  const bookRef      = useRef(null);
-  const hideTimer    = useRef(null);
-  const { darkMode } = useTheme();
+// ─── Main Component ────────────────────────────────────────
+export default function KindleReader({ bookUrl, onClose }) {
+  const { theme: siteTheme, themeKey: siteThemeKey } = useTheme();
 
-  const [isLoaded,  setIsLoaded]  = useState(false);
-  const [error,     setError]     = useState(null);
-  const [progress,  setProgress]  = useState(0);
-  const [showUI,    setShowUI]    = useState(true);
-  const [isReading, setIsReading] = useState(false);
-  const [fontSize,  setFontSize]  = useState(100);
-  const [isMobile,  setIsMobile]  = useState(window.innerWidth < TWO_COL_MIN);
+  const viewerRef   = useRef(null);
+  const bookRef     = useRef(null);
+  const rendRef     = useRef(null);
+  const touchStartX = useRef(null);
+  const styleCache  = useRef("");
 
-  const ui = UI[darkMode ? "dark" : "light"];
+  // Map site theme to reader theme
+  const defaultReaderTheme = { light: 'light', dark: 'dark', sepia: 'sepia' }[siteThemeKey] || 'light';
 
-  // ── Track viewport width ───────────────────────────────────────────
+  const [readerThemeKey, setReaderThemeKey] = useState(defaultReaderTheme);
+  const [fontIdx,        setFontIdx]        = useState(0);
+  const [fontSizeIdx,    setFontSizeIdx]    = useState(2);
+  const [lineHeight,     setLineHeight]     = useState(1.8);
+  const [twoColumn,      setTwoColumn]      = useState(false);
+  const [progress,       setProgress]       = useState(0);
+  const [toc,            setToc]            = useState([]);
+  const [chapter,        setChapter]        = useState("");
+  const [metadata,       setMetadata]       = useState(null);
+  const [showToc,        setShowToc]        = useState(false);
+  const [showSettings,   setShowSettings]   = useState(false);
+  const [uiVisible,      setUiVisible]      = useState(true);
+  const [speaking,       setSpeaking]       = useState(false);
+  const [pageText,       setPageText]       = useState("");
+  const [loaded,         setLoaded]         = useState(false);
+
+  // Sync when site theme changes
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < TWO_COL_MIN);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    setReaderThemeKey({ light: 'light', dark: 'dark', sepia: 'sepia' }[siteThemeKey] || 'light');
+  }, [siteThemeKey]);
 
-  // ── Cleanup ────────────────────────────────────────────────────────
-  useEffect(() => () => {
-    stopAudio();
-    renditionRef.current?.destroy();
-    bookRef.current?.destroy();
-  }, []);
+  const rt       = READER_THEMES[readerThemeKey];
+  const fontSize = FONT_SIZES[fontSizeIdx];
+  const font     = FONTS[fontIdx];
 
-  // ── Load + configure EPUB ──────────────────────────────────────────
+  // Chrome colors come from site theme
+  const chromeBg     = siteTheme.navBg;
+  const chromeBorder = siteTheme.border;
+  const chromeFg     = siteTheme.fg;
+  const chromeMuted  = siteTheme.fgMuted;
+  const purple       = siteTheme.accent;
+
+  // ── Build and apply styles ────────────────────────────────
+  const applyStyles = useCallback(() => {
+    if (!rendRef.current) return;
+    const css = buildCss(rt, font, fontSize, lineHeight);
+    styleCache.current = css;
+    injectStyle(rendRef.current, css);
+  }, [rt, font, fontSize, lineHeight]);
+
+  // Re-apply on any setting change
+  useEffect(() => {
+    applyStyles();
+  }, [applyStyles]);
+
+  // ── Load book ─────────────────────────────────────────────
   useEffect(() => {
     if (!bookUrl || !viewerRef.current) return;
 
     const book = ePub(bookUrl);
     bookRef.current = book;
 
-    const rendition = book.renderTo(viewerRef.current, {
-      width:  "100%",
+    const rendOptions = {
+      width: "100%",
       height: "100%",
-      spread: isMobile ? "none" : "always",   // two-column on desktop
-      flow:   "paginated",
-      // minSpreadWidth: on desktop allow two columns
-      minSpreadWidth: isMobile ? 9999 : TWO_COL_MIN,
-    });
-    renditionRef.current = rendition;
-
-    // Register themes via epub.js built-in API
-    rendition.themes.register("light", EPUB_LIGHT);
-    rendition.themes.register("dark",  EPUB_DARK);
-    rendition.themes.select(darkMode ? "dark" : "light");
-    rendition.themes.fontSize(`${fontSize}%`);
-
-    rendition.display();
-
-    rendition.on("relocated", (loc) => {
-      setProgress(Math.floor((loc?.start?.percentage || 0) * 100));
-    });
-
-    // Forward keyboard events from inside the iframe to the window
-    rendition.on("keyup", (e) => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key }));
-    });
-
-    setIsLoaded(true);
-    setError(null);
-
-    return () => {
-      rendition.destroy();
-      book.destroy();
-      renditionRef.current = null;
-      bookRef.current = null;
+      spread: twoColumn && window.innerWidth >= 1024 ? "always" : "none",
+      flow: "paginated",
+      allowScriptedContent: true,
+      resizeOnOrientationChange: true,
     };
-  // Re-initialise if spread mode needs to change (mobile ↔ desktop)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookUrl, isMobile]);
 
-  // ── Sync theme ────────────────────────────────────────────────────
-  useEffect(() => {
-    renditionRef.current?.themes?.select(darkMode ? "dark" : "light");
-  }, [darkMode]);
+    const rend = book.renderTo(viewerRef.current, rendOptions);
+    rendRef.current = rend;
 
-  // ── Sync font size ────────────────────────────────────────────────
-  useEffect(() => {
-    renditionRef.current?.themes?.fontSize(`${fontSize}%`);
-  }, [fontSize]);
+    rend.display().then(() => {
+      setLoaded(true);
+      // Inject styles after first render
+      setTimeout(() => {
+        const css = buildCss(rt, font, fontSize, lineHeight);
+        injectStyle(rend, css);
+      }, 200);
+    });
 
-  // ── Keyboard nav ─────────────────────────────────────────────────
-  useEffect(() => {
+    book.loaded.navigation.then(nav => setToc(nav.toc || []));
+    book.loaded.metadata.then(meta => setMetadata(meta));
+
+    rend.on("relocated", (loc) => {
+      const pct = book.locations.percentageFromCfi(loc.start.cfi);
+      if (!isNaN(pct)) setProgress(Math.round(pct * 100));
+
+      // Re-inject styles on page change (epub.js recreates iframes)
+      setTimeout(() => {
+        const css = buildCss(READER_THEMES[readerThemeKey], FONTS[fontIdx], FONT_SIZES[fontSizeIdx], lineHeight);
+        injectStyle(rend, css);
+      }, 100);
+
+      extractText(rend);
+      book.loaded.navigation.then(nav => {
+        const item = nav.get(loc.start.href);
+        if (item) setChapter(item.label?.trim() || "");
+      });
+    });
+
+    // Also inject on render events
+    rend.on("rendered", () => {
+      setTimeout(() => {
+        const css = styleCache.current || buildCss(rt, font, fontSize, lineHeight);
+        injectStyle(rend, css);
+      }, 150);
+    });
+
+    book.ready.then(() => book.locations.generate(1024));
+
     const onKey = (e) => {
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") goNext();
-      if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   goPrev();
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") rend.next();
+      if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   rend.prev();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
-  // ── Auto-hide UI ──────────────────────────────────────────────────
-  const nudge = useCallback(() => {
-    setShowUI(true);
-    clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setShowUI(false), 4000);
-  }, []);
+    return () => {
+      stopTTS();
+      window.removeEventListener("keydown", onKey);
+      book.destroy();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookUrl]);
 
-  useEffect(() => {
-    nudge();
-    return () => clearTimeout(hideTimer.current);
-  }, [nudge]);
+  // ── Two-column toggle: recreate rendition ─────────────────
+  const toggleTwoColumn = () => {
+    if (!bookRef.current || !viewerRef.current) return;
+    const newVal = !twoColumn;
+    setTwoColumn(newVal);
 
-  // ── Navigation ───────────────────────────────────────────────────
-  const goNext = (e) => { e?.stopPropagation(); renditionRef.current?.next(); nudge(); };
-  const goPrev = (e) => { e?.stopPropagation(); renditionRef.current?.prev(); nudge(); };
+    try {
+      rendRef.current?.destroy();
+    } catch (_) {}
 
-  // ── Read aloud ───────────────────────────────────────────────────
-  const getPageText = () => {
-    const r = renditionRef.current;
-    if (!r) return "";
-    let text = "";
-    r.getContents().forEach((c) => {
-      const body = c?.document?.body;
-      if (body) text += (body.innerText || body.textContent || "") + " ";
+    const rend = bookRef.current.renderTo(viewerRef.current, {
+      width: "100%",
+      height: "100%",
+      spread: newVal && window.innerWidth >= 1024 ? "always" : "none",
+      flow: "paginated",
+      allowScriptedContent: true,
     });
-    return text.replace(/\s+/g, " ").trim();
+    rendRef.current = rend;
+
+    rend.display().then(() => {
+      setTimeout(() => {
+        const css = buildCss(rt, font, fontSize, lineHeight);
+        styleCache.current = css;
+        injectStyle(rend, css);
+      }, 200);
+    });
+
+    rend.on("relocated", (loc) => {
+      const pct = bookRef.current.locations.percentageFromCfi(loc.start.cfi);
+      if (!isNaN(pct)) setProgress(Math.round(pct * 100));
+      setTimeout(() => injectStyle(rend, styleCache.current), 100);
+      extractText(rend);
+    });
+
+    rend.on("rendered", () => {
+      setTimeout(() => injectStyle(rend, styleCache.current), 150);
+    });
   };
 
-  const handleRead = (e) => {
-    e?.stopPropagation();
-    if (isReading) { stopAudio(); setIsReading(false); return; }
-    const text = getPageText();
-    if (!text) return;
-    setIsReading(true);
-    speakText(text, () => setIsReading(false));
+  const extractText = (rend) => {
+    try {
+      const contents = rend.getContents?.() || [];
+      setPageText(
+        contents.map(c => c.document?.body?.innerText || "").join(" ").replace(/\s+/g, " ").trim()
+      );
+    } catch (_) {}
   };
 
-  const incFont = (e) => { e.stopPropagation(); setFontSize(s => Math.min(160, s + 10)); };
-  const decFont = (e) => { e.stopPropagation(); setFontSize(s => Math.max(70,  s - 10)); };
+  // ── Auto-hide UI ──────────────────────────────────────────
+  useEffect(() => {
+    let t;
+    const reset = () => {
+      setUiVisible(true);
+      clearTimeout(t);
+      t = setTimeout(() => setUiVisible(false), 4000);
+    };
+    window.addEventListener("mousemove", reset);
+    window.addEventListener("touchstart", reset);
+    reset();
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("mousemove", reset);
+      window.removeEventListener("touchstart", reset);
+    };
+  }, []);
 
-  // ── Bar height — bigger touch targets on mobile ───────────────────
-  const BAR_H = isMobile ? 52 : 44;
+  // ── Swipe ─────────────────────────────────────────────────
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd   = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 50) { dx < 0 ? rendRef.current?.next() : rendRef.current?.prev(); }
+    touchStartX.current = null;
+  };
 
-  // ─────────────────────────────────────────────────────────────────
+  const handleTTS = () => {
+    if (speaking) { stopTTS(); setSpeaking(false); return; }
+    if (!pageText) return;
+    setSpeaking(true);
+    speakText(pageText, () => setSpeaking(false));
+  };
+
+  const closeAll = () => { setShowToc(false); setShowSettings(false); };
+
+  // ── Style helpers ─────────────────────────────────────────
+  const ib = {
+    background: "transparent", border: "none", cursor: "pointer",
+    color: chromeFg, display: "flex", alignItems: "center",
+    padding: "8px", borderRadius: "8px", flexShrink: 0,
+  };
+
+  const pillBtn = (active) => ({
+    padding: "5px 12px",
+    borderRadius: "20px",
+    fontSize: "12px",
+    cursor: "pointer",
+    background: active ? purple : "transparent",
+    color: active ? "#fff" : chromeFg,
+    border: `1px solid ${active ? purple : chromeBorder}`,
+    transition: "all 0.15s",
+    whiteSpace: "nowrap",
+  });
+
   return (
-    <div
-      onMouseMove={nudge}
-      onTouchStart={nudge}
-      style={{
-        position:      "fixed",       // cover the whole viewport reliably on mobile
-        inset:         0,
-        display:       "flex",
-        flexDirection: "column",
-        background:    ui.bg,
-        overflow:      "hidden",
-      }}
-    >
-      {/* ── Progress line ── */}
+    <>
+      <style>{`
+        .kr-ib:hover { background: ${siteTheme.isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"} !important; }
+        .kr-toc-btn:hover { background: ${siteTheme.surface2} !important; }
+        .kr-nav:hover { opacity: 1 !important; }
+        @keyframes kr-spin { to { transform: rotate(360deg); } }
+        .kr-panel { scrollbar-width: thin; scrollbar-color: ${chromeBorder} transparent; }
+      `}</style>
+
       <div style={{
-        flexShrink: 0,
-        height:     "2px",
-        background: ui.border,
+        position: "fixed", inset: 0, zIndex: 9999,
+        display: "flex", flexDirection: "column",
+        background: chromeBg, color: chromeFg, overflow: "hidden",
       }}>
+
+        {/* ── Top bar ───────────────────────────────────────── */}
         <div style={{
-          height:     "100%",
-          width:      `${progress}%`,
-          background: ui.accent,
-          transition: "width 0.4s ease",
-        }}/>
-      </div>
-
-      {/* ── EPUB viewer — fills all remaining space ── */}
-      <div
-        ref={viewerRef}
-        onClick={nudge}
-        style={{
-          flex:       "1 1 auto",
-          minHeight:  0,            // ← must-have for flex shrink to work
-          width:      "100%",
-          background: darkMode ? "#121212" : "#ffffff",
-          // On mobile Safari 100vh is unreliable; position:fixed+inset:0 handles it
-        }}
-      />
-
-      {/* ── Left arrow (hidden on mobile — tap zones handle it) ── */}
-      {!isMobile && (
-        <NavArrow side="left" show={showUI && isLoaded} ui={ui} barH={BAR_H} onClick={goPrev}>‹</NavArrow>
-      )}
-
-      {/* ── Right arrow ── */}
-      {!isMobile && (
-        <NavArrow side="right" show={showUI && isLoaded} ui={ui} barH={BAR_H} onClick={goNext}>›</NavArrow>
-      )}
-
-      {/* ── Mobile tap zones (left 40% = prev, right 40% = next, centre = nudge) ── */}
-      {isMobile && isLoaded && (
-        <>
-          <button onClick={goPrev} aria-label="Previous page" style={tapZone("left",  BAR_H)} />
-          <button onClick={goNext} aria-label="Next page"     style={tapZone("right", BAR_H)} />
-        </>
-      )}
-
-      {/* ── Bottom control bar ── */}
-      {isLoaded && (
-        <div style={{
-          flexShrink:     0,
-          height:         `${BAR_H}px`,
-          display:        "flex",
-          alignItems:     "center",
-          justifyContent: "space-between",
-          padding:        isMobile ? "0 8px" : "0 16px",
-          background:     ui.bar,
-          borderTop:      `1px solid ${ui.border}`,
-          backdropFilter: "blur(12px)",
-          opacity:        showUI ? 1 : 0,
-          transition:     "opacity 0.3s ease",
-          zIndex:         40,
-          // safe area on notched phones
-          paddingBottom:  "env(safe-area-inset-bottom, 0px)",
+          display: "flex", alignItems: "center", height: "52px",
+          padding: "0 8px", flexShrink: 0, gap: "4px",
+          background: chromeBg,
+          borderBottom: `1px solid ${chromeBorder}`,
+          position: "relative", zIndex: 100,
+          transition: "opacity 0.3s, transform 0.3s",
+          opacity: uiVisible ? 1 : 0,
+          transform: uiVisible ? "translateY(0)" : "translateY(-100%)",
+          pointerEvents: uiVisible ? "auto" : "none",
         }}>
+          <button className="kr-ib" style={ib}
+            onClick={onClose || (() => window.history.back())}>
+            <IBack />
+          </button>
 
-          {/* Font controls */}
-          <div style={{ display:"flex", alignItems:"center", gap: isMobile ? "0" : "2px" }}>
-            <Btn ui={ui} onClick={decFont} label="A−">
-              <span style={{ fontSize:"0.68rem", fontStyle:"italic" }}>A</span>
-              <span style={{ fontSize:"0.6rem", marginLeft:"1px" }}>−</span>
-            </Btn>
-            {!isMobile && (
-              <span style={{ fontSize:"0.68rem", color:ui.muted, minWidth:"30px", textAlign:"center" }}>
-                {fontSize}%
-              </span>
+          <button className="kr-ib" style={ib}
+            onClick={() => { setShowToc(v => !v); setShowSettings(false); }}>
+            <IToc />
+          </button>
+
+          <div style={{ flex: 1, textAlign: "center", overflow: "hidden", padding: "0 8px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {metadata?.title || "Reading"}
+            </div>
+            {chapter && (
+              <div style={{ fontSize: "11px", color: chromeMuted, marginTop: "1px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {chapter}
+              </div>
             )}
-            <Btn ui={ui} onClick={incFont} label="A+">
-              <span style={{ fontSize:"0.88rem", fontStyle:"italic" }}>A</span>
-              <span style={{ fontSize:"0.6rem", marginLeft:"1px" }}>+</span>
-            </Btn>
           </div>
 
-          {/* Centre: prev / listen / next */}
-          <div style={{ display:"flex", alignItems:"center", gap:"4px" }}>
-            {/* Show prev/next buttons only on desktop; mobile uses tap zones */}
-            {!isMobile && (
-              <Btn ui={ui} onClick={goPrev} label="Prev">‹ Prev</Btn>
-            )}
+          {/* Two-column toggle (desktop only) */}
+          <button
+            className="kr-ib"
+            style={{ ...ib, color: twoColumn ? purple : chromeFg, display: window.innerWidth < 1024 ? "none" : "flex" }}
+            onClick={toggleTwoColumn}
+            title={twoColumn ? "Single column" : "Two columns"}
+          >
+            <ICols />
+          </button>
 
-            <Btn ui={ui} onClick={handleRead} label={isReading ? "Stop" : "Listen"} accent={isReading ? ui.accent : undefined}>
-              {isReading
-                ? <><SoundWave color={ui.accent}/><span style={{ marginLeft:"5px", color:ui.accent, fontSize:"0.78rem" }}>Stop</span></>
-                : <span style={{ fontSize:"0.78rem" }}>🔊{!isMobile && " Listen"}</span>
+          <button className="kr-ib" style={ib}
+            onClick={() => { setShowSettings(v => !v); setShowToc(false); }}>
+            <ISet />
+          </button>
+        </div>
+
+        {/* ── ToC panel ─────────────────────────────────────── */}
+        {showToc && (
+          <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.4)" }}
+              onClick={closeAll} />
+            <div className="kr-panel" style={{
+              position: "fixed", top: "52px", left: 0, zIndex: 201,
+              width: "min(280px, 100vw)", maxHeight: "calc(100vh - 52px)",
+              background: chromeBg, borderTop: `1px solid ${chromeBorder}`,
+              borderRight: `1px solid ${chromeBorder}`, overflowY: "auto",
+              boxShadow: "4px 0 32px rgba(0,0,0,0.25)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 16px", borderBottom: `1px solid ${chromeBorder}` }}>
+                <span style={{ fontWeight: 600, fontSize: "13px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Contents</span>
+                <button className="kr-ib" style={{ ...ib, padding: "4px" }} onClick={closeAll}><IClose /></button>
+              </div>
+              {toc.length === 0
+                ? <div style={{ padding: "20px 16px", color: chromeMuted, fontSize: "13px" }}>No chapters found.</div>
+                : toc.map((item, i) => (
+                  <button key={i} className="kr-toc-btn"
+                    onClick={() => { rendRef.current?.display(item.href); closeAll(); }}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      background: "transparent", border: "none",
+                      borderBottom: `1px solid ${chromeBorder}`,
+                      padding: "12px 16px", fontSize: "13px",
+                      color: chromeFg, cursor: "pointer", transition: "background 0.15s",
+                    }}>
+                    {item.label}
+                  </button>
+                ))
               }
-            </Btn>
+            </div>
+          </>
+        )}
 
-            {!isMobile && (
-              <Btn ui={ui} onClick={goNext} label="Next">Next ›</Btn>
-            )}
+        {/* ── Settings panel ────────────────────────────────── */}
+        {showSettings && (
+          <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.4)" }}
+              onClick={closeAll} />
+            <div className="kr-panel" style={{
+              position: "fixed", top: "52px", right: 0, zIndex: 201,
+              width: "min(300px, 100vw)", maxHeight: "calc(100vh - 52px)",
+              background: chromeBg, borderTop: `1px solid ${chromeBorder}`,
+              borderLeft: `1px solid ${chromeBorder}`, overflowY: "auto",
+              boxShadow: "-4px 0 32px rgba(0,0,0,0.25)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 16px", borderBottom: `1px solid ${chromeBorder}` }}>
+                <span style={{ fontWeight: 600, fontSize: "13px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Settings</span>
+                <button className="kr-ib" style={{ ...ib, padding: "4px" }} onClick={closeAll}><IClose /></button>
+              </div>
+
+              <div style={{ padding: "16px 16px 28px" }}>
+
+                {/* Reading theme */}
+                <SettingSection label="Reading Theme" chromeMuted={chromeMuted}>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {Object.entries(READER_THEMES).map(([key, t]) => (
+                      <button key={key}
+                        onClick={() => {
+                          setReaderThemeKey(key);
+                          // Apply immediately
+                          setTimeout(() => {
+                            const css = buildCss(t, font, fontSize, lineHeight);
+                            styleCache.current = css;
+                            injectStyle(rendRef.current, css);
+                          }, 50);
+                        }}
+                        style={{
+                          ...pillBtn(readerThemeKey === key),
+                          background: readerThemeKey === key ? purple : t.bg,
+                          color: readerThemeKey === key ? "#fff" : t.fg,
+                          border: `2px solid ${readerThemeKey === key ? purple : t.scrollbar}`,
+                        }}>
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </SettingSection>
+
+                {/* Typeface */}
+                <SettingSection label="Typeface" chromeMuted={chromeMuted}>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {FONTS.map((f, i) => (
+                      <button key={f.label}
+                        onClick={() => {
+                          setFontIdx(i);
+                          setTimeout(() => {
+                            const css = buildCss(rt, f, fontSize, lineHeight);
+                            styleCache.current = css;
+                            injectStyle(rendRef.current, css);
+                          }, 50);
+                        }}
+                        style={{ ...pillBtn(fontIdx === i), fontFamily: f.value }}>
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </SettingSection>
+
+                {/* Font size */}
+                <SettingSection label={`Font Size — ${fontSize}px`} chromeMuted={chromeMuted}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "11px", color: chromeMuted }}>A</span>
+                    <input type="range" min={0} max={FONT_SIZES.length - 1} value={fontSizeIdx}
+                      style={{ flex: 1, accentColor: purple, cursor: "pointer" }}
+                      onChange={e => {
+                        const idx = +e.target.value;
+                        setFontSizeIdx(idx);
+                        const sz = FONT_SIZES[idx];
+                        setTimeout(() => {
+                          const css = buildCss(rt, font, sz, lineHeight);
+                          styleCache.current = css;
+                          injectStyle(rendRef.current, css);
+                        }, 50);
+                      }} />
+                    <span style={{ fontSize: "19px", color: chromeMuted }}>A</span>
+                  </div>
+                </SettingSection>
+
+                {/* Line height */}
+                <SettingSection label={`Line Spacing — ${lineHeight}`} chromeMuted={chromeMuted}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "13px", color: chromeMuted }}>≡</span>
+                    <input type="range" min={1.2} max={2.4} step={0.1} value={lineHeight}
+                      style={{ flex: 1, accentColor: purple, cursor: "pointer" }}
+                      onChange={e => {
+                        const lh = +e.target.value;
+                        setLineHeight(lh);
+                        setTimeout(() => {
+                          const css = buildCss(rt, font, fontSize, lh);
+                          styleCache.current = css;
+                          injectStyle(rendRef.current, css);
+                        }, 50);
+                      }} />
+                    <span style={{ fontSize: "13px", color: chromeMuted }}>⦀</span>
+                  </div>
+                </SettingSection>
+
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Reader area ───────────────────────────────────── */}
+        <div style={{ flex: 1, position: "relative", overflow: "hidden", background: rt.bg }}
+          onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+
+          {/* Spinner */}
+          {!loaded && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: rt.bg, zIndex: 10,
+            }}>
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "50%",
+                border: `3px solid ${chromeBorder}`, borderTopColor: purple,
+                animation: "kr-spin 0.8s linear infinite",
+              }} />
+              <div style={{ marginTop: "12px", fontSize: "13px", color: chromeMuted }}>Loading…</div>
+            </div>
+          )}
+
+          {/* epub.js target */}
+          <div ref={viewerRef} style={{ width: "100%", height: "100%" }} />
+
+          {/* Desktop nav arrows */}
+          {["left", "right"].map(side => (
+            <button key={side} className="kr-nav"
+              onClick={side === "left" ? () => rendRef.current?.prev() : () => rendRef.current?.next()}
+              style={{
+                position: "absolute", [side]: "16px", top: "50%", transform: "translateY(-50%)",
+                background: siteTheme.isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+                border: `1px solid ${chromeBorder}`, borderRadius: "50%",
+                width: "40px", height: "40px", display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", color: chromeFg, zIndex: 5,
+                opacity: uiVisible ? 0.7 : 0, transition: "opacity 0.3s",
+                pointerEvents: uiVisible ? "auto" : "none",
+              }}>
+              {side === "left" ? <ILeft /> : <IRight />}
+            </button>
+          ))}
+
+          {/* Mobile tap zones */}
+          <div style={{ position: "absolute", left: 0, top: 0, width: "22%", height: "100%", zIndex: 4 }}
+            onClick={() => rendRef.current?.prev()} />
+          <div style={{ position: "absolute", right: 0, top: 0, width: "22%", height: "100%", zIndex: 4 }}
+            onClick={() => rendRef.current?.next()} />
+        </div>
+
+        {/* ── Bottom bar ────────────────────────────────────── */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "12px",
+          padding: "0 16px", height: "48px", flexShrink: 0,
+          background: chromeBg, borderTop: `1px solid ${chromeBorder}`,
+          transition: "opacity 0.3s, transform 0.3s",
+          opacity: uiVisible ? 1 : 0,
+          transform: uiVisible ? "translateY(0)" : "translateY(100%)",
+          pointerEvents: uiVisible ? "auto" : "none",
+        }}>
+          {/* TTS */}
+          <button onClick={handleTTS} disabled={!pageText} style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "5px 12px", borderRadius: "20px", fontSize: "12px",
+            background: speaking ? purple : "transparent",
+            color: speaking ? "#fff" : chromeFg,
+            border: `1px solid ${speaking ? purple : chromeBorder}`,
+            cursor: pageText ? "pointer" : "not-allowed",
+            opacity: pageText ? 1 : 0.35,
+            transition: "all 0.2s", whiteSpace: "nowrap", flexShrink: 0,
+          }}>
+            {speaking ? <><IPause /> Stop</> : <><IPlay /> Read aloud</>}
+          </button>
+
+          {/* Progress bar */}
+          <div style={{ flex: 1, height: "3px", background: chromeBorder, borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${progress}%`, background: purple,
+              borderRadius: "2px", transition: "width 0.5s ease",
+            }} />
           </div>
 
-          {/* Progress % */}
-          <span style={{
-            fontSize:  "0.7rem",
-            color:     ui.muted,
-            minWidth:  "36px",
-            textAlign: "right",
-            fontVariantNumeric: "tabular-nums",
-          }}>
+          <span style={{ fontSize: "11px", color: chromeMuted, minWidth: "32px", textAlign: "right", flexShrink: 0 }}>
             {progress}%
           </span>
-
         </div>
-      )}
-
-      {/* ── Error ── */}
-      {error && (
-        <div style={{
-          position:     "absolute",
-          top:          "16px",
-          left:         "50%",
-          transform:    "translateX(-50%)",
-          background:   "#c0392b",
-          color:        "#fff",
-          padding:      "6px 16px",
-          borderRadius: "6px",
-          fontSize:     "0.85rem",
-          zIndex:       60,
-          whiteSpace:   "nowrap",
-        }}>{error}</div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
-// ── Side nav arrow (desktop only) ────────────────────────────────────
-function NavArrow({ side, show, ui, barH, onClick, children }) {
-  const [hover, setHover] = useState(false);
+function SettingSection({ label, children, chromeMuted }) {
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      title={side === "left" ? "Previous (←)" : "Next (→)"}
-      style={{
-        position:       "absolute",
-        [side]:         0,
-        top:            "2px",          // below progress bar
-        bottom:         `${barH}px`,    // above control bar
-        width:          "clamp(32px, 5vw, 56px)",
-        background:     "transparent",
-        border:         "none",
-        cursor:         "pointer",
-        display:        "flex",
-        alignItems:     "center",
-        justifyContent: "center",
-        zIndex:         30,
-        opacity:        show ? 1 : 0,
-        transition:     "opacity 0.3s ease",
-      }}
-    >
-      <span style={{
-        width:          "34px",
-        height:         "50px",
-        background:     hover ? ui.bar : `${ui.bar}cc`,
-        border:         `1px solid ${ui.border}`,
-        borderRadius:   side === "left" ? "0 8px 8px 0" : "8px 0 0 8px",
-        ...(side === "left" ? { borderLeft:"none" } : { borderRight:"none" }),
-        display:        "flex",
-        alignItems:     "center",
-        justifyContent: "center",
-        fontSize:       "1.4rem",
-        color:          hover ? ui.accent : ui.muted,
-        backdropFilter: "blur(6px)",
-        transition:     "color 0.15s, background 0.15s",
-        lineHeight:     1,
+    <div style={{ marginBottom: "20px" }}>
+      <div style={{
+        fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em",
+        color: chromeMuted, marginBottom: "10px", fontWeight: 600,
       }}>
-        {children}
-      </span>
-    </button>
-  );
-}
-
-// ── Tap zone (mobile invisible buttons) ──────────────────────────────
-function tapZone(side, barH) {
-  return {
-    position:   "absolute",
-    [side]:     0,
-    top:        "2px",
-    bottom:     `${barH}px`,
-    width:      "38%",
-    background: "transparent",
-    border:     "none",
-    cursor:     "pointer",
-    zIndex:     20,
-    WebkitTapHighlightColor: "transparent",
-  };
-}
-
-// ── Generic bar button ────────────────────────────────────────────────
-function Btn({ ui, onClick, children, accent, label }) {
-  const [hover, setHover] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        background:   hover ? ui.border : "transparent",
-        border:       "none",
-        borderRadius: "20px",
-        padding:      "5px 10px",
-        cursor:       "pointer",
-        color:        accent || (hover ? ui.text : ui.muted),
-        fontSize:     "0.8rem",
-        display:      "flex",
-        alignItems:   "center",
-        gap:          "2px",
-        transition:   "background 0.15s, color 0.15s",
-        whiteSpace:   "nowrap",
-        fontFamily:   "inherit",
-        // Larger touch target on mobile
-        minHeight:    "36px",
-        minWidth:     "36px",
-        justifyContent: "center",
-        WebkitTapHighlightColor: "transparent",
-      }}
-    >
+        {label}
+      </div>
       {children}
-    </button>
+    </div>
   );
 }

@@ -1,61 +1,109 @@
+import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { FiHome, FiRotateCcw, FiBookmark, FiUser } from "react-icons/fi";
 import { useTheme } from "../context/ThemeContext";
 
+const NAV_ITEMS = [
+  { to: "/home",    Icon: FiHome,      label: "Home" },
+  { to: "/history", Icon: FiRotateCcw, label: "History" },
+  { to: "/saved",   Icon: FiBookmark,  label: "Saved" },
+];
+
 const Sidebar = () => {
   const location = useLocation();
-  const { darkMode } = useTheme();
+  const { theme } = useTheme();
 
-  // NavItem Component
-  const NavItem = ({ to, Icon }) => {
+  const NavItem = ({ to, Icon, label, bottom = false }) => {
     const isActive = location.pathname === to;
-    
     return (
       <Link
         to={to}
-        className={`
-          flex items-center justify-center w-10 h-10 rounded-lg transition
-          ${isActive 
-            ? "bg-purple-600 text-white" 
-            : darkMode 
-              ? "text-gray-400 hover:bg-gray-800 hover:text-white" 
-              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+        title={label}
+        className="relative flex items-center justify-center w-11 h-11 rounded-2xl transition-all duration-200"
+        style={{
+          background: isActive ? theme.accent : 'transparent',
+          color: isActive ? '#fff' : theme.fgMuted,
+        }}
+        onMouseEnter={e => {
+          if (!isActive) {
+            e.currentTarget.style.background = theme.surface2;
+            e.currentTarget.style.color = theme.fg;
           }
-        `}
+        }}
+        onMouseLeave={e => {
+          if (!isActive) {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = theme.fgMuted;
+          }
+        }}
       >
-        <Icon size={20} />
+        <Icon size={19} />
+        {/* Tooltip */}
+        <span
+          className="absolute left-full ml-3 px-2 py-1 text-xs font-semibold rounded-lg opacity-0 pointer-events-none whitespace-nowrap
+                     group-hover:opacity-100 transition-opacity"
+          style={{ background: theme.fg, color: theme.bg }}
+        >
+          {label}
+        </span>
       </Link>
     );
   };
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside className={`hidden sm:flex fixed left-0 top-0 h-screen w-20 flex-col items-center py-6 border-r z-50 ${
-        darkMode ? "bg-[#0a0a0a] border-gray-800" : "bg-[#faf9f8] border-gray-200"
-      }`}>
-        {/* Center nav */}
-        <div className="flex flex-col gap-6 flex-1 justify-center">
-          <NavItem to="/home" Icon={FiHome} />
-          <NavItem to="/history" Icon={FiRotateCcw} />
-          <NavItem to="/saved" Icon={FiBookmark} />
+      {/* ── Desktop Sidebar ── */}
+      <aside
+        className="hidden sm:flex fixed left-0 top-0 h-screen w-[72px] flex-col items-center py-8 border-r z-50"
+        style={{ background: theme.navBg, borderColor: theme.border }}
+      >
+        {/* Main nav - Centered */}
+        <div className="flex flex-col gap-3 flex-1 items-center justify-center">
+          {NAV_ITEMS.map(item => (
+            <NavItem key={item.to} {...item} />
+          ))}
         </div>
 
         {/* Divider */}
-        <div className={`w-6 h-px my-6 ${darkMode ? "bg-gray-800" : "bg-gray-200"}`} />
+        <div className="w-8 h-px my-4" style={{ background: theme.border }} />
 
-        {/* Profile */}
-        <NavItem to="/profile" Icon={FiUser} />
+        {/* Profile at bottom */}
+        <div className="flex-shrink-0">
+          <NavItem to="/profile" Icon={FiUser} label="Profile" />
+        </div>
       </aside>
 
-      {/* Mobile Bottom Nav */}
-      <nav className={`fixed bottom-0 left-0 right-0 flex sm:hidden border-t justify-around py-2 z-50 ${
-        darkMode ? "bg-[#0a0a0a] border-gray-800" : "bg-[#faf9f8] border-gray-200"
-      }`}>
-        <NavItem to="/home" Icon={FiHome} />
-        <NavItem to="/history" Icon={FiRotateCcw} />
-        <NavItem to="/saved" Icon={FiBookmark} />
-        <NavItem to="/profile" Icon={FiUser} />
+      {/* ── Mobile Bottom Nav ── */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 flex sm:hidden justify-around items-center border-t z-50 pb-safe"
+        style={{
+          background: theme.navBg,
+          borderColor: theme.border,
+          paddingTop: '10px',
+          paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+        }}
+      >
+        {[...NAV_ITEMS, { to: "/profile", Icon: FiUser, label: "Profile" }].map(({ to, Icon, label }) => {
+          const isActive = location.pathname === to;
+          return (
+            <Link
+              key={to}
+              to={to}
+              className="flex flex-col items-center gap-1 px-4 py-1 rounded-xl transition-all duration-200"
+              style={{ color: isActive ? theme.accent : theme.fgMuted }}
+            >
+              <div
+                className="w-10 h-10 flex items-center justify-center rounded-2xl transition-all"
+                style={{ background: isActive ? theme.accentSoft : 'transparent' }}
+              >
+                <Icon size={20} />
+              </div>
+              <span className="text-[10px] font-semibold tracking-wide">
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </nav>
     </>
   );
