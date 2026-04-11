@@ -1,29 +1,38 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "../context/ThemeContext";
 
 /**
  * BookCard — two visual modes:
  *   variant="grid"   → portrait cover + title/author below  (default, grid usage)
  *   variant="row"    → horizontal thumbnail + info          (history, saved lists)
  */
-const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
+const BookCard = ({ book, variant = "grid", showDate, dateLabel, darkMode = false }) => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
 
   const id = book.id || book._id;
   const cover = book.cover || "https://via.placeholder.com/180x270?text=No+Cover";
 
   const handleClick = () => navigate(`/book/${id}`);
 
+  // Theme colors based on dark mode
+  const bgColor = darkMode ? '#1C1917' : '#f3ebe3';
+  const borderColor = darkMode ? '#292524' : '#0000001a';
+  const textColor = darkMode ? '#F5F0EB' : '#000000';
+  const textMuted = darkMode ? '#A8A29E' : '#00000099';
+  const textSubtle = darkMode ? '#57534E' : '#00000066';
+  const surfaceColor = darkMode ? '#292524' : '#efe5dc';
+
   if (variant === "row") {
     return (
       <div
         onClick={handleClick}
         className="group flex gap-4 cursor-pointer rounded-2xl p-3 transition-all duration-200"
-        style={{ background: theme.surface, border: `1px solid ${theme.border}` }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = theme.accent)}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}
+        style={{ 
+          background: bgColor, 
+          border: `1px solid ${borderColor}`,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = '#f57c00'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
       >
         <div className="relative flex-shrink-0 w-16 rounded-xl overflow-hidden shadow-md">
           <div className="aspect-[2/3]">
@@ -38,23 +47,23 @@ const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
         <div className="flex flex-col justify-center gap-1 min-w-0">
           <h3
             className="text-sm font-semibold line-clamp-2 leading-snug"
-            style={{ color: theme.fg }}
+            style={{ color: textColor }}
           >
             {book.title}
           </h3>
-          <p className="text-xs font-medium line-clamp-1" style={{ color: theme.fgMuted }}>
+          <p className="text-xs font-medium line-clamp-1" style={{ color: textMuted }}>
             {book.author}
           </p>
           {book.genre && (
             <span
               className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full w-fit"
-              style={{ background: theme.surface2, color: theme.fgSubtle }}
+              style={{ background: surfaceColor, color: textSubtle }}
             >
               {book.genre}
             </span>
           )}
           {showDate && dateLabel && (
-            <p className="text-[11px]" style={{ color: theme.fgSubtle }}>
+            <p className="text-[11px]" style={{ color: textSubtle }}>
               {dateLabel}
             </p>
           )}
@@ -63,9 +72,9 @@ const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
           <div className="ml-auto flex-shrink-0 flex flex-col items-end justify-center gap-1">
             <div
               className="flex items-center gap-1 text-xs font-bold"
-              style={{ color: theme.fg }}
+              style={{ color: textColor }}
             >
-              <span style={{ color: '#F59E0B' }}>★</span>
+              <span style={{ color: '#f57c00' }}>★</span>
               {book.rating}
             </div>
           </div>
@@ -82,7 +91,7 @@ const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
     >
       {/* Cover */}
       <div className="relative mb-3 overflow-hidden rounded-2xl shadow-md group-hover:shadow-xl transition-all duration-300">
-        <div className="aspect-[2/3]" style={{ background: theme.surface2 }}>
+        <div className="aspect-[2/3]" style={{ background: surfaceColor }}>
           <img
             src={cover}
             alt={book.title}
@@ -96,7 +105,7 @@ const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
         {/* Rating badge */}
         {book.rating && (
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1 bg-black/55 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[11px] font-bold">
-            <span style={{ color: '#FBBF24' }}>★</span>
+            <span style={{ color: '#f57c00' }}>★</span>
             {book.rating}
           </div>
         )}
@@ -113,12 +122,12 @@ const BookCard = ({ book, variant = "grid", showDate, dateLabel }) => {
 
       {/* Text */}
       <h3
-        className="text-[13px] font-semibold line-clamp-2 mb-1 leading-snug transition-colors duration-200 group-hover:text-[--accent]"
-        style={{ color: theme.fg, '--accent': theme.accent }}
+        className="text-[13px] font-semibold line-clamp-2 mb-1 leading-snug transition-colors duration-200 group-hover:text-[#f57c00]"
+        style={{ color: textColor }}
       >
         {book.title}
       </h3>
-      <p className="text-[11px] line-clamp-1 font-medium" style={{ color: theme.fgMuted }}>
+      <p className="text-[11px] line-clamp-1 font-medium" style={{ color: textMuted }}>
         {book.author}
       </p>
     </div>

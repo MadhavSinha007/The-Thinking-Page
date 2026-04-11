@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useTheme } from "../context/ThemeContext";
 import BookCard from "./bookcard";
 import { useAuth } from "../authContext";
 
-// ── Normalize Genres ──────────────────────────────────────
+// Normalize Genres
 const normalizeGenres = (book) => {
   let genres = [];
 
@@ -18,7 +17,7 @@ const normalizeGenres = (book) => {
     .filter(Boolean);
 };
 
-// ── Generate Dynamic Tabs ─────────────────────────────────
+// Generate Dynamic Tabs
 const getGenreTabs = (books) => {
   const set = new Set();
 
@@ -31,73 +30,7 @@ const getGenreTabs = (books) => {
   )];
 };
 
-// ── Category Tabs ─────────────────────────────────────────
-const CategoryTabs = ({ active, onChange, theme, tabs }) => (
-  <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-    {tabs.map(tab => {
-      const isActive = active === tab;
-      return (
-        <button
-          key={tab}
-          onClick={() => onChange(tab)}
-          className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all"
-          style={{
-            background: isActive ? theme.pillActive : "transparent",
-            color: isActive ? theme.pillActiveFg : theme.fgMuted,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          {tab}
-        </button>
-      );
-    })}
-  </div>
-);
-
-// ── Section Header ────────────────────────────────────────
-const SectionHeader = ({ title, theme }) => (
-  <div className="mb-4">
-    <h2
-      className="text-sm font-semibold uppercase tracking-wider"
-      style={{ color: theme.fg }}
-    >
-      {title}
-    </h2>
-  </div>
-);
-
-// ── Book Section ──────────────────────────────────────────
-const BookSection = ({ title, books, theme }) => {
-  if (!books?.length) return null;
-
-  return (
-    <section className="mb-10">
-      <SectionHeader title={title} theme={theme} />
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
-        {books.map(book => (
-          <BookCard key={book._id || book.id} book={book} />
-        ))}
-      </div>
-    </section>
-  );
-};
-
-// ── Greeting ──────────────────────────────────────────────
-const Greeting = ({ username, theme }) => (
-  <div className="mb-6">
-    <h1 className="text-2xl font-semibold" style={{ color: theme.fg }}>
-      Hello,{" "}
-      <span style={{ color: theme.accent }}>
-        {username || "Reader"}
-      </span>
-    </h1>
-    <p className="text-sm mt-1" style={{ color: theme.fgMuted }}>
-      Discover something worth reading
-    </p>
-  </div>
-);
-
-// ── Mock Data ─────────────────────────────────────────────
+// Mock Data
 const MOCK_BOOKS = [
   {
     _id: "1",
@@ -141,14 +74,20 @@ const MOCK_BOOKS = [
   },
 ];
 
-// ── Main Component ────────────────────────────────────────
-const BookList = ({ searchQuery = "" }) => {
-  const { theme } = useTheme();
+const BookList = ({ searchQuery = "", darkMode = false }) => {
   const { currentUser } = useAuth?.() || {};
 
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
+
+  // Theme colors - directly computed from darkMode prop
+  const bgColor = darkMode ? '#111110' : '#efe5dc';
+  const textColor = darkMode ? '#F5F0EB' : '#000000';
+  const textMuted = darkMode ? '#A8A29E' : '#00000099';
+  const borderColor = darkMode ? '#292524' : '#0000001a';
+
+  console.log('BookList darkMode:', darkMode); // Debug log
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -180,16 +119,14 @@ const BookList = ({ searchQuery = "" }) => {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <div
-          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-          style={{ borderColor: theme.border, borderTopColor: theme.accent }}
-        />
+      <div className="flex justify-center py-20" style={{ background: bgColor }}>
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" 
+             style={{ borderColor: borderColor, borderTopColor: '#f57c00' }} />
       </div>
     );
   }
 
-  // ── Search Filter ───────────────────────────────────────
+  // Filter books
   const filtered = books.filter(b => {
     const q = searchQuery.toLowerCase();
     return (
@@ -199,7 +136,6 @@ const BookList = ({ searchQuery = "" }) => {
     );
   });
 
-  // ── Genre Filter ────────────────────────────────────────
   const tabFiltered =
     activeTab === "All"
       ? filtered
@@ -211,20 +147,20 @@ const BookList = ({ searchQuery = "" }) => {
 
   const username =
     currentUser?.displayName ||
-    currentUser?.email?.split("@")[0];
+    currentUser?.email?.split("@")[0] ||
+    "Reader";
 
-  // ── Sections ────────────────────────────────────────────
   const sections = [
     {
       title: "Popular",
       books: [...tabFiltered]
-        .sort((a, b) => b.rating - a.rating)
+        .sort((a, b) => (b.rating || 0) - (a.rating || 0))
         .slice(0, 6),
     },
     {
       title: "Top Rated",
       books: tabFiltered
-        .filter(b => b.rating >= 4.6)
+        .filter(b => (b.rating || 0) >= 4.6)
         .slice(0, 6),
     },
     {
@@ -236,26 +172,62 @@ const BookList = ({ searchQuery = "" }) => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-5 sm:px-8 pt-8">
-      <Greeting username={username} theme={theme} />
+    <div style={{ background: bgColor, minHeight: '100vh' }}>
+      <div className="max-w-7xl mx-auto px-5 sm:px-8 pt-8">
+        {/* Greeting */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-black" style={{ color: textColor }}>
+            Hello,{" "}
+            <span style={{ color: '#f57c00' }}>
+              {username}
+            </span>
+          </h1>
+          <p className="text-sm mt-1" style={{ color: textMuted }}>
+            Discover something worth reading
+          </p>
+        </div>
 
-      <div className="mb-6">
-        <CategoryTabs
-          active={activeTab}
-          onChange={setActiveTab}
-          theme={theme}
-          tabs={genreTabs}
-        />
+        {/* Category Tabs */}
+        <div className="mb-6">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {genreTabs.map(tab => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-105"
+                  style={{
+                    background: isActive ? "#f57c00" : "transparent",
+                    color: isActive ? "#000000" : textMuted,
+                    border: `1px solid ${isActive ? "#f57c00" : borderColor}`,
+                  }}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Book Sections */}
+        {sections.map((sec, i) => (
+          sec.books?.length > 0 && (
+            <section key={i} className="mb-10">
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: textColor }}>
+                  {sec.title}
+                </h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
+                {sec.books.map(book => (
+                  <BookCard key={book._id || book.id} book={book} darkMode={darkMode} />
+                ))}
+              </div>
+            </section>
+          )
+        ))}
       </div>
-
-      {sections.map((sec, i) => (
-        <BookSection
-          key={i}
-          title={sec.title}
-          books={sec.books}
-          theme={theme}
-        />
-      ))}
     </div>
   );
 };

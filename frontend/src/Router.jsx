@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import LandingPage from "./landingpage/LandingPage.jsx";
 
 import Login from "./pages/auth/Login.jsx";
 import Register from "./pages/auth/Register.jsx";
@@ -11,43 +12,35 @@ import BookDetail from "./components/bookdetail.jsx";
 import Profile from "./pages/settings/Profile.jsx";
 
 import ProtectedRoute from "./ProtectedRoute.jsx";
-
 import BookReaderPage from "./pages/books/BookReaderPage.jsx";
 
 const Router = () => {
   return (
     <BrowserRouter>
       <Routes>
-
-        {/* ================= PUBLIC ROUTES ================= */}
+        {/* Public */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* ================= PROTECTED ROUTES ================= */}
+        {/* Protected fullscreen reader */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/read/:id" element={<BookReaderPage />} />
+        </Route>
+
+        {/* Protected app shell */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Render />}>
-
-            {/* Home */}
-            <Route path="/" element={<Navigate to="/home" replace />} />
-            <Route path="home" element={<Home />} />
-
-            {/* User sections */}
-            <Route path="history" element={<History />} />
-            <Route path="saved" element={<Saved />} />
-            <Route path="profile" element={<Profile />} />
-
-            {/* Book detail page */}
-            <Route path="book/:id" element={<BookDetail />} />
-
-            {/* 📖 EPUB READER (NEW) */}
-            <Route path="read/:id" element={<BookReaderPage />} />
-
+            <Route path="/home" element={<Home />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/saved" element={<Saved />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/book/:id" element={<BookDetail />} />
           </Route>
         </Route>
 
-        {/* ================= FALLBACK ================= */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
-
       </Routes>
     </BrowserRouter>
   );

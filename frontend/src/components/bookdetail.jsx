@@ -1,39 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiBookOpen, FiShare2, FiHeart, FiMessageCircle, FiBookmark, FiStar, FiChevronDown, FiChevronUp, FiCalendar, FiBook } from 'react-icons/fi';
-import { useAuth } from '../authContext/index';
-import { useTheme } from '../context/ThemeContext';
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
+import {
+  FiArrowLeft,
+  FiBook,
+  FiBookOpen,
+  FiBookmark,
+  FiCalendar,
+  FiHeart,
+  FiMessageCircle,
+  FiShare2,
+  FiStar,
+  FiChevronDown,
+  FiChevronUp,
+} from "react-icons/fi";
+import { useAuth } from "../authContext/index";
 
 const BookDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { theme } = useTheme();
+  const outlet = useOutletContext?.() || {};
+  const darkMode = outlet.darkMode ?? false;
 
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState("details");
+
+  const theme = useMemo(
+    () => ({
+      bg: darkMode ? "#111110" : "#efe5dc",
+      surface: darkMode ? "#1C1917" : "#f3ebe3",
+      surface2: darkMode ? "#292524" : "#efe5dc",
+      text: darkMode ? "#F5F0EB" : "#000000",
+      textMuted: darkMode ? "#A8A29E" : "#00000099",
+      textSubtle: darkMode ? "#57534E" : "#00000066",
+      border: darkMode ? "#292524" : "#0000001a",
+      accent: "#f57c00",
+      accentSoft: darkMode ? "#3D1410" : "#f57c0015",
+    }),
+    [darkMode]
+  );
 
   useEffect(() => {
     fetchBookDetails();
     fetchComments();
     checkIfSaved();
-  }, [id]);
+  }, [id, currentUser]);
 
   const fetchBookDetails = async () => {
     try {
       setLoading(true);
+      setError("");
+
       const response = await fetch(`http://localhost:8090/api/books/${id}`);
-      if (!response.ok) throw new Error('Book not found');
-      setBook(await response.json());
+      if (!response.ok) throw new Error("Book not found");
+
+      const data = await response.json();
+      setBook(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to load book");
     } finally {
       setLoading(false);
     }
@@ -42,10 +73,9 @@ const BookDetail = () => {
   const fetchComments = async () => {
     try {
       const response = await fetch(`http://localhost:8090/api/coms/book/${id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setComments(Array.isArray(data) ? data : []);
-      }
+      if (!response.ok) return;
+      const data = await response.json();
+      setComments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     }
@@ -53,16 +83,19 @@ const BookDetail = () => {
 
   const checkIfSaved = async () => {
     if (!currentUser) {
-      const saved = JSON.parse(localStorage.getItem('savedBooks') || '[]');
-      setIsSaved(saved.some(b => b.id === id));
+      const saved = JSON.parse(localStorage.getItem("savedBooks") || "[]");
+      setIsSaved(saved.some((b) => String(b.id) === String(id)));
       return;
     }
+
     try {
       const response = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
-      if (response.ok) {
-        const user = await response.json();
-        setIsSaved(user.favBooks?.includes(id));
-      }
+      if (!response.ok) return;
+      const user = await response.json();
+      setIsSaved(
+        Array.isArray(user.favBooks) &&
+          user.favBooks.some((bookId) => String(bookId) === String(id))
+      );
     } catch (err) {
       console.error(err);
     }
@@ -70,76 +103,98 @@ const BookDetail = () => {
 
   const handleReadNow = () => {
     if (!book) return;
-    const history = JSON.parse(localStorage.getItem('history') || '[]');
-    const entry = { 
-      id, 
-      title: book.title, 
-      author: book.author, 
-      cover: book.cover, 
-      lastRead: new Date().toISOString() 
+
+    const history = JSON.parse(localStorage.getItem("history") || "[]");
+    const entry = {
+      id: String(id),
+      title: book.title,
+      author: book.author,
+      cover: book.cover,
+      lastRead: new Date().toISOString(),
     };
-    const filtered = history.filter(b => b.id !== id);
+
+    const filtered = history.filter((b) => String(b.id) !== String(id));
     filtered.unshift(entry);
-    localStorage.setItem('history', JSON.stringify(filtered.slice(0, 50)));
+    localStorage.setItem("history", JSON.stringify(filtered.slice(0, 50)));
+
     navigate(`/read/${id}`);
   };
 
   const handleSave = async () => {
     if (!book) return;
-    
+
     if (!currentUser) {
-      const saved = JSON.parse(localStorage.getItem('savedBooks') || '[]');
+      const saved = JSON.parse(localStorage.getItem("savedBooks") || "[]");
+
       if (isSaved) {
-        localStorage.setItem('savedBooks', JSON.stringify(saved.filter(b => b.id !== id)));
+        localStorage.setItem(
+          "savedBooks",
+          JSON.stringify(saved.filter((b) => String(b.id) !== String(id)))
+        );
       } else {
-        saved.push({ id, title: book.title, author: book.author, cover: book.cover });
-        localStorage.setItem('savedBooks', JSON.stringify(saved));
+        saved.push({
+          id: String(id),
+          title: book.title,
+          author: book.author,
+          cover: book.cover,
+        });
+        localStorage.setItem("savedBooks", JSON.stringify(saved));
       }
-      setIsSaved(!isSaved);
+
+      setIsSaved((prev) => !prev);
       return;
     }
 
     try {
       const userRes = await fetch(`http://localhost:8090/api/users/firebase/${currentUser.uid}`);
       if (!userRes.ok) return;
+
       const user = await userRes.json();
-      const method = isSaved ? 'DELETE' : 'POST';
+      const method = isSaved ? "DELETE" : "POST";
       const res = await fetch(`http://localhost:8090/api/users/${user.id}/favbooks/${id}`, { method });
-      if (res.ok) setIsSaved(!isSaved);
+
+      if (res.ok) setIsSaved((prev) => !prev);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!book) return;
-    if (navigator.share) {
-      navigator.share({ 
-        title: book.title, 
-        text: `Check out "${book.title}" by ${book.author}`, 
-        url: window.location.href 
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Link copied to clipboard!');
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: book.title,
+          text: `Check out "${book.title}" by ${book.author}`,
+          url: window.location.href,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(window.location.href);
+      alert("Link copied to clipboard!");
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
-    
+
     setSubmitting(true);
     try {
-      const res = await fetch('http://localhost:8090/api/coms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          bookid: id, 
-          text: newComment, 
-          user: currentUser?.email || "Anonymous" 
+      const res = await fetch("http://localhost:8090/api/coms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookid: id,
+          text: newComment,
+          user: currentUser?.email || "Anonymous",
         }),
       });
+
       if (res.ok) {
         setNewComment("");
         fetchComments();
@@ -152,16 +207,17 @@ const BookDetail = () => {
   };
 
   const renderStars = (rating) => {
-    const num = parseFloat(rating);
+    const num = Math.round(parseFloat(rating || 0));
+
     return (
-      <div className="flex gap-1">
+      <div className="flex items-center gap-1">
         {[...Array(5)].map((_, i) => (
           <FiStar
             key={i}
             size={18}
-            fill={i < num ? '#F59E0B' : 'none'}
-            stroke={i < num ? '#F59E0B' : theme.border}
-            className={i < num ? 'text-yellow-500' : ''}
+            fill={i < num ? theme.accent : "none"}
+            stroke={i < num ? theme.accent : "currentColor"}
+            style={{ color: i < num ? theme.accent : theme.textSubtle }}
           />
         ))}
       </div>
@@ -170,11 +226,20 @@ const BookDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: theme.bg }}>
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-t-transparent" 
-               style={{ borderColor: theme.accent, borderTopColor: 'transparent' }} />
-          <p className="mt-4 text-sm" style={{ color: theme.fgMuted }}>Loading book...</p>
+      <div className="min-h-screen w-full" style={{ background: theme.bg }}>
+        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-10">
+          <div
+            className="rounded-[28px] border p-10 text-center"
+            style={{ background: theme.surface, borderColor: theme.border }}
+          >
+            <div
+              className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
+              style={{ borderColor: theme.border, borderTopColor: theme.accent }}
+            />
+            <p className="mt-4 text-sm font-medium" style={{ color: theme.textMuted }}>
+              Loading book details…
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -182,264 +247,281 @@ const BookDetail = () => {
 
   if (error || !book) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: theme.bg }}>
-        <div className="text-center max-w-md">
-          <FiBookOpen size={48} className="mx-auto mb-4 opacity-50" style={{ color: theme.fgMuted }} />
-          <p className="text-lg mb-4" style={{ color: theme.fgMuted }}>{error || 'Book not found'}</p>
-          <button
-            onClick={() => navigate('/home')}
-            className="px-6 py-2 rounded-lg text-white font-semibold transition-transform hover:scale-105"
-            style={{ background: theme.accent }}
+      <div className="min-h-screen w-full" style={{ background: theme.bg }}>
+        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-10">
+          <div
+            className="w-full max-w-lg rounded-[28px] border p-8 text-center"
+            style={{ background: theme.surface, borderColor: theme.border }}
           >
-            Browse Books
-          </button>
+            <FiBookOpen size={48} className="mx-auto mb-4 opacity-40" style={{ color: theme.textMuted }} />
+            <h2 className="text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+              Could not open this book
+            </h2>
+            <p className="mt-3 text-sm leading-6" style={{ color: theme.textMuted }}>
+              {error || "Book not found"}
+            </p>
+            <button
+              onClick={() => navigate("/home")}
+              className="mt-6 rounded-full px-6 py-3 font-semibold text-black transition-transform hover:scale-105"
+              style={{ background: theme.accent }}
+            >
+              Browse Books
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen pb-12" style={{ background: theme.bg }}>
-      {/* Hero Section */}
-      <div className="relative overflow-hidden" style={{ borderBottom: `1px solid ${theme.border}` }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          {/* Back Button */}
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 mb-6 text-sm transition-colors hover:opacity-70"
-            style={{ color: theme.fgMuted }}
-          >
-            <FiArrowLeft size={18} />
-            Back
-          </button>
+  const description = book.desc || "No description available.";
+  const displayedDescription =
+    showFullDesc || description.length < 300 ? description : `${description.slice(0, 300)}…`;
 
-          {/* Book Content */}
-          <div className="flex flex-col lg:flex-row gap-8">
-            {/* Cover */}
-            <div className="flex-shrink-0 mx-auto lg:mx-0 w-48 sm:w-56 lg:w-64">
-              <div className="rounded-xl overflow-hidden shadow-lg">
+  return (
+    <div className="min-h-screen w-full" style={{ background: theme.bg }}>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-5 inline-flex items-center gap-2 text-sm font-medium transition-opacity hover:opacity-70"
+          style={{ color: theme.textMuted }}
+        >
+          <FiArrowLeft size={18} />
+          Back
+        </button>
+
+        <section
+          className="overflow-hidden rounded-[32px] border"
+          style={{ background: theme.surface, borderColor: theme.border }}
+        >
+          <div className="grid gap-8 p-5 sm:p-6 lg:grid-cols-[280px_1fr] lg:p-8">
+            <div className="mx-auto w-full max-w-[260px]">
+              <div
+                className="overflow-hidden rounded-[24px] border"
+                style={{ borderColor: theme.border, background: theme.surface2 }}
+              >
                 <img
-                  src={book.cover || "https://placehold.co/400x600/2a2a2a/ffffff?text=No+Cover"}
+                  src={
+                    book.cover ||
+                    `https://placehold.co/400x600/${darkMode ? "1C1917/F5F0EB" : "efe5dc/000000"}?text=No+Cover`
+                  }
                   alt={book.title}
-                  className="w-full aspect-[2/3] object-cover"
-                  onError={e => { e.target.src = "https://placehold.co/400x600/2a2a2a/ffffff?text=No+Cover"; }}
+                  className="aspect-[2/3] w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = darkMode
+                      ? "https://placehold.co/400x600/1C1917/F5F0EB?text=No+Cover"
+                      : "https://placehold.co/400x600/efe5dc/000000?text=No+Cover";
+                  }}
                 />
               </div>
             </div>
 
-            {/* Info */}
-            <div className="flex-1 text-center lg:text-left">
-              {/* Genres */}
-              <div className="flex flex-wrap gap-2 justify-center lg:justify-start mb-4">
-                {book.genre?.split(',').slice(0, 3).map((g, idx) => (
+            <div>
+              <div className="flex flex-wrap gap-2">
+                {(book.genre ? String(book.genre).split(",") : ["Book"]).slice(0, 3).map((g, idx) => (
                   <span
                     key={idx}
-                    className="text-xs px-3 py-1 rounded-full"
-                    style={{
-                      background: `${theme.accent}15`,
-                      color: theme.accent,
-                    }}
+                    className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                    style={{ background: theme.accentSoft, color: theme.accent }}
                   >
                     {g.trim()}
                   </span>
                 ))}
               </div>
 
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: theme.fg }}>
+              <h1
+                className="mt-4 text-3xl font-black uppercase leading-[0.95] tracking-[-0.04em] sm:text-4xl lg:text-5xl"
+                style={{ color: theme.text }}
+              >
                 {book.title}
               </h1>
-              
-              <p className="text-base sm:text-lg mb-4" style={{ color: theme.fgMuted }}>
-                by {book.author}
+
+              <p className="mt-3 text-base sm:text-lg" style={{ color: theme.textMuted }}>
+                by {book.author || "Unknown author"}
               </p>
 
-              {/* Rating */}
-              <div className="flex flex-wrap items-center gap-4 justify-center lg:justify-start mb-6">
+              <div className="mt-5 flex flex-wrap items-center gap-3">
                 {renderStars(book.rating)}
-                <span className="text-sm" style={{ color: theme.fgMuted }}>
-                  {book.rating} / 5.0 ({book.reviews || 0} reviews)
+                <span className="text-sm" style={{ color: theme.textMuted }}>
+                  {book.rating || "N/A"} / 5.0
                 </span>
+                {book.reviews ? (
+                  <span className="text-sm" style={{ color: theme.textSubtle }}>
+                    {book.reviews} reviews
+                  </span>
+                ) : null}
               </div>
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-3 justify-center lg:justify-start mb-6">
+              <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   onClick={handleReadNow}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white font-semibold transition-all hover:scale-105"
+                  className="rounded-full px-6 py-3 font-semibold text-black transition-all hover:scale-105"
                   style={{ background: theme.accent }}
                 >
-                  <FiBookOpen size={18} />
                   Read Now
                 </button>
 
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-all border hover:scale-105"
-                  style={{
-                    color: isSaved ? theme.accent : theme.fgMuted,
-                    borderColor: isSaved ? theme.accent : theme.border,
-                    background: 'transparent'
-                  }}
+                  className="inline-flex items-center gap-2 rounded-full border px-5 py-3 font-semibold transition-all hover:scale-105"
+                  style={{ borderColor: theme.border, color: theme.text, background: theme.surface2 }}
                 >
-                  <FiBookmark size={18} fill={isSaved ? theme.accent : 'none'} />
-                  {isSaved ? 'Saved' : 'Save'}
+                  {isSaved ? <FiHeart size={18} /> : <FiBookmark size={18} />}
+                  {isSaved ? "Saved" : "Save"}
                 </button>
 
                 <button
                   onClick={handleShare}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-all border hover:scale-105"
-                  style={{ 
-                    color: theme.fgMuted, 
-                    borderColor: theme.border,
-                    background: 'transparent'
-                  }}
+                  className="inline-flex items-center gap-2 rounded-full border px-5 py-3 font-semibold transition-all hover:scale-105"
+                  style={{ borderColor: theme.border, color: theme.text, background: theme.surface2 }}
                 >
                   <FiShare2 size={18} />
                   Share
                 </button>
               </div>
 
-              {/* Quick Info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-lg" style={{ background: `${theme.surface2}80` }}>
-                <div className="text-center">
-                  <FiBook size={18} className="mx-auto mb-1" style={{ color: theme.accent }} />
-                  <p className="text-xs mb-0.5" style={{ color: theme.fgSubtle }}>Pages</p>
-                  <p className="text-sm font-semibold" style={{ color: theme.fg }}>{book.pages || 'N/A'}</p>
-                </div>
-                <div className="text-center">
-                  <FiCalendar size={18} className="mx-auto mb-1" style={{ color: theme.accent }} />
-                  <p className="text-xs mb-0.5" style={{ color: theme.fgSubtle }}>Year</p>
-                  <p className="text-sm font-semibold" style={{ color: theme.fg }}>{book.pubYear || 'N/A'}</p>
-                </div>
-                <div className="text-center">
-                  <FiHeart size={18} className="mx-auto mb-1" style={{ color: theme.accent }} />
-                  <p className="text-xs mb-0.5" style={{ color: theme.fgSubtle }}>Language</p>
-                  <p className="text-sm font-semibold" style={{ color: theme.fg }}>{book.language || 'English'}</p>
-                </div>
-                <div className="text-center">
-                  <FiStar size={18} className="mx-auto mb-1" style={{ color: theme.accent }} />
-                  <p className="text-xs mb-0.5" style={{ color: theme.fgSubtle }}>Rating</p>
-                  <p className="text-sm font-semibold" style={{ color: theme.fg }}>{book.rating || 'N/A'}</p>
-                </div>
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                <StatCard icon={<FiBookOpen size={18} />} label="Format" value="EPUB Reader" theme={theme} />
+                <StatCard icon={<FiCalendar size={18} />} label="Published" value={book.year || "Unknown"} theme={theme} />
+                <StatCard icon={<FiBook size={18} />} label="Category" value={book.category || book.genre || "General"} theme={theme} />
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex gap-4 border-b mt-6" style={{ borderBottomColor: theme.border }}>
-          {['details', 'comments'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="px-4 py-2 text-sm font-semibold transition-all relative"
-              style={{ color: activeTab === tab ? theme.accent : theme.fgMuted }}
-            >
-              {tab === 'details' ? 'Description' : `Comments (${comments.length})`}
-              {activeTab === tab && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: theme.accent }} />
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Description Tab */}
-        {activeTab === 'details' && (
-          <div className="py-6">
-            <div className="rounded-lg p-6" style={{ background: 'transparent', border: `1px solid ${theme.border}` }}>
-              <p className={`leading-relaxed ${!showFullDesc && book.desc?.length > 300 ? 'line-clamp-4' : ''}`} style={{ color: theme.fgMuted }}>
-                {book.desc || 'No description available.'}
-              </p>
-              {book.desc?.length > 300 && (
+        <section className="mt-5 overflow-hidden rounded-[32px] border" style={{ background: theme.surface, borderColor: theme.border }}>
+          <div className="flex flex-wrap gap-2 border-b p-4" style={{ borderColor: theme.border }}>
+            {[
+              { key: "details", label: "Details" },
+              { key: "comments", label: `Comments (${comments.length})` },
+            ].map((tab) => {
+              const active = activeTab === tab.key;
+              return (
                 <button
-                  onClick={() => setShowFullDesc(!showFullDesc)}
-                  className="mt-3 text-sm font-semibold flex items-center gap-1"
-                  style={{ color: theme.accent }}
-                >
-                  {showFullDesc ? (
-                    <>Show less <FiChevronUp size={16} /></>
-                  ) : (
-                    <>Read more <FiChevronDown size={16} /></>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Comments Tab */}
-        {activeTab === 'comments' && (
-          <div className="py-6">
-            <div className="rounded-lg p-6" style={{ background: 'transparent', border: `1px solid ${theme.border}` }}>
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: theme.fg }}>
-                <FiMessageCircle size={20} />
-                Reader Comments
-              </h3>
-
-              {/* Comment Form */}
-              <form onSubmit={handleCommentSubmit} className="mb-6">
-                <textarea
-                  className="w-full p-3 rounded-lg text-sm outline-none resize-none transition-all"
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className="rounded-full px-4 py-2 text-sm font-semibold transition-all"
                   style={{
-                    background: `${theme.surface2}50`,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.fg,
+                    background: active ? theme.accent : theme.surface2,
+                    color: active ? "#000000" : theme.text,
+                    border: `1px solid ${active ? theme.accent : theme.border}`,
                   }}
-                  rows={3}
-                  placeholder="Share your thoughts..."
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                />
-                <div className="flex justify-end mt-3">
-                  <button
-                    type="submit"
-                    disabled={submitting || !newComment.trim()}
-                    className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all"
-                    style={{
-                      background: submitting || !newComment.trim() ? theme.fgSubtle : theme.accent,
-                      cursor: submitting || !newComment.trim() ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {submitting ? 'Posting...' : 'Post Comment'}
-                  </button>
-                </div>
-              </form>
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-              {/* Comments List */}
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {comments.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FiMessageCircle size={40} className="mx-auto mb-2 opacity-30" style={{ color: theme.fgMuted }} />
-                    <p className="text-sm" style={{ color: theme.fgSubtle }}>No comments yet. Be the first!</p>
-                  </div>
-                ) : (
-                  comments.map((comment, idx) => (
-                    <div
-                      key={comment.id || idx}
-                      className="p-4 rounded-lg"
-                      style={{ background: `${theme.surface2}30`, border: `1px solid ${theme.border}` }}
+          {activeTab === "details" ? (
+            <div className="p-5 sm:p-6 lg:p-8">
+              <div className="rounded-[24px] border p-5 sm:p-6" style={{ background: theme.surface2, borderColor: theme.border }}>
+                <p className="text-xs uppercase tracking-[0.24em]" style={{ color: theme.textSubtle }}>
+                  About this book
+                </p>
+                <p className="mt-4 text-sm leading-7 sm:text-base" style={{ color: theme.textMuted }}>
+                  {displayedDescription}
+                </p>
+                {description.length > 300 ? (
+                  <button
+                    onClick={() => setShowFullDesc((prev) => !prev)}
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold"
+                    style={{ color: theme.accent }}
+                  >
+                    {showFullDesc ? (
+                      <>
+                        Show less <FiChevronUp size={16} />
+                      </>
+                    ) : (
+                      <>
+                        Read more <FiChevronDown size={16} />
+                      </>
+                    )}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="p-5 sm:p-6 lg:p-8">
+              <div className="rounded-[24px] border p-5 sm:p-6" style={{ background: theme.surface2, borderColor: theme.border }}>
+                <h3 className="flex items-center gap-2 text-lg font-black tracking-tight" style={{ color: theme.text }}>
+                  <FiMessageCircle size={20} />
+                  Reader Comments
+                </h3>
+
+                <form onSubmit={handleCommentSubmit} className="mt-5">
+                  <textarea
+                    className="w-full resize-none rounded-[20px] border p-4 text-sm outline-none"
+                    style={{
+                      background: theme.surface,
+                      borderColor: theme.border,
+                      color: theme.text,
+                    }}
+                    rows={4}
+                    placeholder="Share your thoughts about this book…"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                  />
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submitting || !newComment.trim()}
+                      className="rounded-full px-5 py-2.5 text-sm font-semibold text-black transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ background: theme.accent }}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-sm font-semibold" style={{ color: theme.accent }}>
-                          {comment.user || "Anonymous"}
-                        </span>
-                        <span className="text-xs" style={{ color: theme.fgSubtle }}>
-                          {new Date(comment.createdAt || Date.now()).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm leading-relaxed" style={{ color: theme.fgMuted }}>
-                        {comment.text}
+                      {submitting ? "Posting..." : "Post Comment"}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-6 space-y-3">
+                  {comments.length === 0 ? (
+                    <div className="rounded-[20px] border px-5 py-8 text-center" style={{ borderColor: theme.border }}>
+                      <FiMessageCircle size={36} className="mx-auto opacity-35" style={{ color: theme.textMuted }} />
+                      <p className="mt-3 text-sm" style={{ color: theme.textSubtle }}>
+                        No comments yet. Be the first one.
                       </p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    comments.map((comment, idx) => (
+                      <div
+                        key={comment.id || idx}
+                        className="rounded-[20px] border p-4"
+                        style={{ background: theme.surface, borderColor: theme.border }}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-semibold" style={{ color: theme.accent }}>
+                            {comment.user || "Anonymous"}
+                          </span>
+                          <span className="text-xs" style={{ color: theme.textSubtle }}>
+                            {new Date(comment.createdAt || Date.now()).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6" style={{ color: theme.textMuted }}>
+                          {comment.text}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </section>
       </div>
+    </div>
+  );
+};
+
+const StatCard = ({ icon, label, value, theme }) => {
+  return (
+    <div className="rounded-[22px] border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+      <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: theme.textSubtle }}>
+        {icon}
+        {label}
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6" style={{ color: theme.text }}>
+        {value}
+      </p>
     </div>
   );
 };

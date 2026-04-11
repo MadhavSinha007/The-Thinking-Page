@@ -1,14 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "../components/sidebar";
 import Navbar from "../components/navbar";
 import { doSignOut } from "../pages/auth/auth";
-import { useTheme } from "../context/ThemeContext";
 
 const Render = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const { theme } = useTheme();
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('ttp-dark-mode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Apply dark mode class to html element when darkMode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('ttp-dark-mode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   const handleLogout = async () => {
     try {
@@ -28,24 +40,25 @@ const Render = () => {
     }
   };
 
+  const toggleDarkMode = () => {
+    setDarkMode(prev => !prev);
+  };
+
+  const bgColor = darkMode ? '#111110' : '#efe5dc';
+
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: theme.bg }}>
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main column */}
+    <div className="flex h-screen overflow-hidden" style={{ background: bgColor }}>
+      <Sidebar darkMode={darkMode} />
       <div className="flex flex-col flex-1 overflow-hidden sm:ml-[72px]">
-        {/* Navbar */}
-        <Navbar onLogout={handleLogout} onSearch={handleSearch} />
-
-        {/* Page content */}
-        <main
-          className="flex-1 overflow-y-auto pt-[60px]"
-          style={{ background: theme.bg }}
-          // Extra bottom padding on mobile for the bottom nav
-        >
+        <Navbar 
+          onLogout={handleLogout} 
+          onSearch={handleSearch} 
+          darkMode={darkMode}
+          toggleDarkMode={toggleDarkMode}
+        />
+        <main className="flex-1 overflow-y-auto pt-[60px]" style={{ background: bgColor }}>
           <div className="pb-24 sm:pb-8">
-            <Outlet context={{ searchQuery }} />
+            <Outlet context={{ searchQuery, darkMode }} />
           </div>
         </main>
       </div>

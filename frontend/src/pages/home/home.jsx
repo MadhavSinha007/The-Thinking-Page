@@ -1,12 +1,11 @@
-import React from 'react';
-import { useSearchParams } from 'react-router-dom';
-import BookList from '../../components/booklist';
+import React from "react";
+import { useOutletContext } from "react-router-dom";
+import BookList from "../../components/booklist";
 
 const Home = () => {
-  const [searchParams] = useSearchParams();
-  const searchQuery = searchParams.get('search') || '';
-
-  return <BookList searchQuery={searchQuery} />;
+  const { searchQuery = "", darkMode = false } = useOutletContext();
+  
+  return <BookList searchQuery={searchQuery} darkMode={darkMode} />;
 };
 
 export default Home;
