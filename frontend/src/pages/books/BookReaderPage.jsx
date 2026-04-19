@@ -10,16 +10,16 @@ const BookReaderPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Disable outer scrolling when this page mounts, restore when unmounts
   useEffect(() => {
-    // Find the main content element (the one with overflow-y-auto in Render.jsx)
     const mainElement = document.querySelector("main.flex-1.overflow-y-auto");
     if (mainElement) {
       mainContainerRef.current = mainElement;
       const originalOverflow = mainElement.style.overflow;
       const originalHeight = mainElement.style.height;
+
       mainElement.style.overflow = "hidden";
       mainElement.style.height = "100%";
+
       return () => {
         mainElement.style.overflow = originalOverflow;
         mainElement.style.height = originalHeight;
@@ -27,19 +27,16 @@ const BookReaderPage = () => {
     }
   }, []);
 
-  // Load book data
   useEffect(() => {
     const loadBook = async () => {
       try {
         const res = await fetch(`http://localhost:8090/api/books/${id}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const data = await res.json();
-
-        console.log("📦 Backend Response:", data);
-
         const url = data?.file;
-        if (!url) throw new Error("No file URL in response");
 
+        if (!url) throw new Error("No file URL in response");
         setBookUrl(url);
       } catch (err) {
         console.error("❌ Error loading book:", err);

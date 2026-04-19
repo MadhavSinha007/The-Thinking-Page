@@ -1,30 +1,40 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ePub from "epubjs";
+import {
+  speakText,
+  stopAudio,
+  isSpeaking,
+  getSpeechEngine,
+} from "../../utils/readerTTS";
 
 const THEMES = {
   light: {
     shellBg: "#efe5dc",
     overlayBg: "rgba(243, 235, 227, 0.96)",
-    text: "#000000",
-    muted: "#00000099",
-    subtle: "#00000066",
-    border: "#0000001a",
+    text: "#16120f",
+    muted: "#6b625b",
+    subtle: "#8a8077",
+    border: "#00000014",
     accent: "#f57c00",
-    readerBg: "#f5efe8",
+    accentSoft: "rgba(245,124,0,0.12)",
+    readerBg: "#f7f1ea",
     readerText: "#17120e",
     readerLink: "#f57c00",
+    playerBg: "rgba(255,255,255,0.7)",
   },
   dark: {
     shellBg: "#111110",
     overlayBg: "rgba(28, 25, 23, 0.96)",
     text: "#F5F0EB",
-    muted: "#A8A29E",
-    subtle: "#57534E",
-    border: "#292524",
+    muted: "#b8aea6",
+    subtle: "#8a8179",
+    border: "#ffffff14",
     accent: "#f57c00",
+    accentSoft: "rgba(245,124,0,0.16)",
     readerBg: "#181512",
     readerText: "#F5F0EB",
     readerLink: "#f57c00",
+    playerBg: "rgba(36,32,29,0.82)",
   },
 };
 
@@ -55,7 +65,7 @@ const buildReaderCss = ({ theme, fontFamily, fontSize, lineHeight, mobile }) => 
 
   body {
     box-sizing: border-box !important;
-    padding: ${mobile ? "18px 16px 34px" : "34px 42px 42px"} !important;
+    padding: ${mobile ? "20px 16px 90px" : "34px 42px 42px"} !important;
     word-break: normal !important;
     overflow-wrap: break-word !important;
     -webkit-font-smoothing: antialiased !important;
@@ -123,10 +133,17 @@ const buildReaderCss = ({ theme, fontFamily, fontSize, lineHeight, mobile }) => 
   }
 `;
 
-const OverlayButton = ({ children, active = false, theme, compact = false, className = "", ...props }) => (
+const OverlayButton = ({
+  children,
+  active = false,
+  theme,
+  compact = false,
+  className = "",
+  ...props
+}) => (
   <button
     {...props}
-    className={`rounded-full border font-semibold transition-all hover:scale-105 ${
+    className={`rounded-full border font-semibold transition-all active:scale-95 ${
       compact ? "px-3 py-2 text-xs" : "px-4 py-2 text-sm"
     } ${className}`}
     style={{
@@ -144,7 +161,7 @@ const OverlayButton = ({ children, active = false, theme, compact = false, class
 const CircleButton = ({ children, theme, className = "", ...props }) => (
   <button
     {...props}
-    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-base font-bold transition-all hover:scale-105 ${className}`}
+    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-base font-bold transition-all active:scale-95 ${className}`}
     style={{
       background: theme.overlayBg,
       color: theme.text,
@@ -157,6 +174,25 @@ const CircleButton = ({ children, theme, className = "", ...props }) => (
   </button>
 );
 
+const AudioBars = ({ active, theme }) => {
+  return (
+    <div className="flex h-7 items-end gap-1">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className={`block w-1.5 rounded-full ${active ? "animate-pulse" : ""}`}
+          style={{
+            height: active ? `${12 + ((i % 3) + 1) * 5}px` : "8px",
+            background: theme.accent,
+            opacity: active ? 1 : 0.45,
+            animationDuration: `${0.55 + i * 0.12}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 export default function KindleReader({
   bookUrl,
   title = "Book Reader",
@@ -167,8 +203,7 @@ export default function KindleReader({
   const renditionRef = useRef(null);
   const bookRef = useRef(null);
   const hideTimerRef = useRef(null);
-  const touchStartYRef = useRef(null);
-  const touchStartXRef = useRef(null);
+  const autoNextTimerRef = useRef(null);
 
   const [themeKey, setThemeKey] = useState("light");
   const [fontIndex, setFontIndex] = useState(0);
@@ -186,6 +221,9 @@ export default function KindleReader({
   const [showToc, setShowToc] = useState(false);
   const [isReadingAloud, setIsReadingAloud] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState("idle");
+  const [speechEngine, setSpeechEngine] = useState("idle");
+  const [currentSpokenText, setCurrentSpokenText] = useState("");
 
   const theme = useMemo(() => THEMES[themeKey], [themeKey]);
   const font = FONTS[fontIndex];
@@ -195,6 +233,13 @@ export default function KindleReader({
     if (hideTimerRef.current) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
+    }
+  };
+
+  const clearAutoNextTimer = () => {
+    if (autoNextTimerRef.current) {
+      window.clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
     }
   };
 
@@ -258,6 +303,114 @@ export default function KindleReader({
       await renditionRef.current.next();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const getVisibleText = () => {
+    try {
+      const contents = renditionRef.current?.getContents?.() || [];
+
+      return contents
+        .map((content) => {
+          const doc = content.document || content.window?.document;
+          return doc?.body?.innerText || "";
+        })
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+    } catch (err) {
+      console.error("Failed to extract visible text:", err);
+      return "";
+    }
+  };
+
+  const readCurrentPage = async ({ continueToNextPage = true } = {}) => {
+    const text = getVisibleText();
+
+    if (!text) {
+      setSpeechStatus("idle");
+      setIsReadingAloud(false);
+      return;
+    }
+
+    setCurrentSpokenText(text);
+    setSpeechStatus("speaking");
+    setSpeechEngine("starting");
+
+    await speakText(text, async ({ completed }) => {
+      const engine = getSpeechEngine();
+      setSpeechEngine(engine || "idle");
+
+      if (!completed) {
+        setSpeechStatus("idle");
+        setIsReadingAloud(false);
+        return;
+      }
+
+      if (!continueToNextPage || !isReadingAloud) {
+        setSpeechStatus("idle");
+        return;
+      }
+
+      setSpeechStatus("page-finished");
+
+      clearAutoNextTimer();
+      autoNextTimerRef.current = window.setTimeout(async () => {
+        if (!isReadingAloud) return;
+        await goNext();
+        window.setTimeout(() => {
+          if (isReadingAloud) {
+            readCurrentPage({ continueToNextPage: true });
+          }
+        }, 450);
+      }, 350);
+    });
+  };
+
+  const startReadAloud = async () => {
+    setIsReadingAloud(true);
+    setSpeechStatus("speaking");
+    showControls("bottom");
+    await readCurrentPage({ continueToNextPage: true });
+  };
+
+  const stopReadAloud = () => {
+    clearAutoNextTimer();
+    stopAudio();
+    setIsReadingAloud(false);
+    setSpeechStatus("idle");
+    setSpeechEngine("idle");
+  };
+
+  const handleReadAloud = async () => {
+    if (isSpeaking() || isReadingAloud) {
+      stopReadAloud();
+    } else {
+      await startReadAloud();
+    }
+  };
+
+  const handleNextWhileReading = async () => {
+    const keepReading = isReadingAloud;
+    stopAudio();
+    clearAutoNextTimer();
+    await goNext();
+    if (keepReading) {
+      window.setTimeout(() => {
+        readCurrentPage({ continueToNextPage: true });
+      }, 450);
+    }
+  };
+
+  const handlePrevWhileReading = async () => {
+    const keepReading = isReadingAloud;
+    stopAudio();
+    clearAutoNextTimer();
+    await goPrev();
+    if (keepReading) {
+      window.setTimeout(() => {
+        readCurrentPage({ continueToNextPage: true });
+      }, 450);
     }
   };
 
@@ -346,6 +499,8 @@ export default function KindleReader({
     return () => {
       mounted = false;
       clearHideTimer();
+      clearAutoNextTimer();
+      stopAudio();
       try {
         rendition.off?.("relocated", onRelocated);
         rendition.destroy();
@@ -358,16 +513,20 @@ export default function KindleReader({
 
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (isMobile || !renditionRef.current) return;
+      if (!renditionRef.current) return;
 
       switch (e.key) {
         case "ArrowRight":
           e.preventDefault();
-          goNext();
+          handleNextWhileReading();
           break;
         case "ArrowLeft":
           e.preventDefault();
-          goPrev();
+          handlePrevWhileReading();
+          break;
+        case " ":
+          e.preventDefault();
+          handleReadAloud();
           break;
         case "Escape":
           if (showSettings || showToc) {
@@ -385,7 +544,7 @@ export default function KindleReader({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isMobile, showSettings, showToc, onClose]);
+  }, [showSettings, showToc, onClose, isReadingAloud]);
 
   useEffect(() => {
     showControls("both");
@@ -396,7 +555,8 @@ export default function KindleReader({
     showControls("both");
   };
 
-  const handleCenterToggle = () => {
+  const handleCenterClick = () => {
+    if (isMobile) return;
     const visible = showTopBar || showBottomBar || showSettings || showToc;
     if (visible) {
       hideControlsNow();
@@ -407,13 +567,9 @@ export default function KindleReader({
     }
   };
 
-  const handleReadAloud = () => {
-    setIsReadingAloud((prev) => !prev);
-    showControls("bottom");
-  };
-
   const goToTocItem = async (href) => {
     try {
+      stopReadAloud();
       await renditionRef.current?.display(href);
       setShowToc(false);
       showControls("top");
@@ -422,28 +578,54 @@ export default function KindleReader({
     }
   };
 
-  const onTouchStart = (e) => {
-    const touch = e.touches[0];
-    touchStartYRef.current = touch.clientY;
-    touchStartXRef.current = touch.clientX;
+  const handleTouchStart = (e) => {
+    if (!isMobile) return;
+    const touchX = e.touches[0].clientX;
+    e.currentTarget.dataset.touchStartX = touchX;
+    e.currentTarget.dataset.touchStartTime = Date.now();
   };
 
-  const onTouchEnd = (e) => {
+  const handleTouchEnd = (e) => {
     if (!isMobile) return;
 
-    const startY = touchStartYRef.current;
-    const startX = touchStartXRef.current;
-    if (startY == null || startX == null) return;
+    const startX = parseFloat(e.currentTarget.dataset.touchStartX);
+    const startTime = parseFloat(e.currentTarget.dataset.touchStartTime);
+    const endX = e.changedTouches[0].clientX;
+    const endTime = Date.now();
+    const deltaX = endX - startX;
+    const deltaTime = endTime - startTime;
 
-    const touch = e.changedTouches[0];
-    const deltaY = touch.clientY - startY;
-    const deltaX = touch.clientX - startX;
-
-    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 40) {
-      if (deltaY < 0) {
-        setShowBottomBar(true);
+    if (Math.abs(deltaX) > 50 && deltaTime < 300) {
+      if (deltaX < 0) {
+        handleNextWhileReading();
       } else {
-        setShowTopBar(true);
+        handlePrevWhileReading();
+      }
+      return;
+    }
+
+    if (Math.abs(deltaX) < 10 && deltaTime < 300) {
+      const screenWidth = window.innerWidth;
+
+      if (endX < screenWidth * 0.28) {
+        handlePrevWhileReading();
+      } else if (endX > screenWidth * 0.72) {
+        handleNextWhileReading();
+      } else {
+        const visible = showTopBar || showBottomBar || showSettings || showToc;
+        if (visible) {
+          hideControlsNow();
+        } else {
+          setShowTopBar(true);
+          setShowBottomBar(true);
+          clearHideTimer();
+          hideTimerRef.current = window.setTimeout(() => {
+            if (!showSettings && !showToc) {
+              setShowTopBar(false);
+              setShowBottomBar(false);
+            }
+          }, 3000);
+        }
       }
     }
   };
@@ -452,6 +634,14 @@ export default function KindleReader({
   const bottomVisible = showBottomBar;
   const bookTitle = metadata?.title || title;
   const authorName = metadata?.creator || author || "EPUB Reader";
+  const engineLabel =
+    speechEngine === "elevenlabs"
+      ? "ElevenLabs"
+      : speechEngine === "puter"
+      ? "Puter.js"
+      : speechEngine === "browser"
+      ? "Browser Voice"
+      : "Ready";
 
   if (readerError) {
     return (
@@ -484,11 +674,11 @@ export default function KindleReader({
 
   return (
     <div
-      className="relative h-[100dvh] w-screen overflow-hidden"
+      className="relative h-[100dvh] w-screen overflow-hidden select-none"
       style={{ background: theme.readerBg, color: theme.text }}
       onMouseMove={handleMouseMove}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {!loaded ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center" style={{ background: theme.readerBg }}>
@@ -510,45 +700,48 @@ export default function KindleReader({
         style={{ background: theme.readerBg }}
       />
 
-      <button
-        type="button"
-        aria-label="Previous page"
-        onClick={goPrev}
-        className="absolute left-0 top-0 z-20 h-full w-[14%] bg-transparent sm:w-[14%] lg:w-[18%]"
-      />
-
-      <button
-        type="button"
-        aria-label="Next page"
-        onClick={goNext}
-        className="absolute right-0 top-0 z-20 h-full w-[14%] bg-transparent sm:w-[14%] lg:w-[18%]"
-      />
-
-      <button
-        type="button"
-        aria-label="Toggle controls"
-        onClick={handleCenterToggle}
-        className="absolute left-[14%] top-0 z-20 h-full w-[72%] bg-transparent sm:left-[14%] sm:w-[72%] lg:left-[18%] lg:w-[64%]"
-      />
-
       {!isMobile && (
         <>
+          <button
+            type="button"
+            aria-label="Previous page"
+            onClick={handlePrevWhileReading}
+            className="absolute left-0 top-0 z-20 h-full w-[14%] bg-transparent sm:w-[14%] lg:w-[18%]"
+          />
+          <button
+            type="button"
+            aria-label="Next page"
+            onClick={handleNextWhileReading}
+            className="absolute right-0 top-0 z-20 h-full w-[14%] bg-transparent sm:w-[14%] lg:w-[18%]"
+          />
+          <button
+            type="button"
+            aria-label="Toggle controls"
+            onClick={handleCenterClick}
+            className="absolute left-[14%] top-0 z-20 h-full w-[72%] bg-transparent sm:left-[14%] sm:w-[72%] lg:left-[18%] lg:w-[64%]"
+          />
           <CircleButton
             theme={theme}
-            onClick={goPrev}
+            onClick={handlePrevWhileReading}
             className="absolute left-3 top-1/2 z-30 -translate-y-1/2 lg:left-4"
           >
             ←
           </CircleButton>
-
           <CircleButton
             theme={theme}
-            onClick={goNext}
+            onClick={handleNextWhileReading}
             className="absolute right-3 top-1/2 z-30 -translate-y-1/2 lg:right-4"
           >
             →
           </CircleButton>
         </>
+      )}
+
+      {isMobile && loaded && !showTopBar && !showBottomBar && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex justify-between px-4 opacity-60">
+          <div className="rounded-full bg-black/30 px-2 py-1 text-xs text-white">← Prev</div>
+          <div className="rounded-full bg-black/30 px-2 py-1 text-xs text-white">Next →</div>
+        </div>
       )}
 
       <div
@@ -765,7 +958,7 @@ export default function KindleReader({
                   <button
                     key={`${item.href}-${idx}`}
                     onClick={() => goToTocItem(item.href)}
-                    className="rounded-[16px] border px-4 py-3 text-left text-sm transition-all hover:scale-[1.01]"
+                    className="rounded-[16px] border px-4 py-3 text-left text-sm transition-all active:scale-[0.99]"
                     style={{
                       background: "transparent",
                       borderColor: theme.border,
@@ -787,7 +980,7 @@ export default function KindleReader({
         }`}
       >
         <div
-          className="border-t px-3 py-3 sm:px-5"
+          className="border-t px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:px-5"
           style={{
             background: theme.overlayBg,
             borderColor: theme.border,
@@ -797,18 +990,54 @@ export default function KindleReader({
         >
           {isMobile ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={handleReadAloud}
-                  className="rounded-full px-4 py-2.5 text-xs font-semibold transition-all hover:scale-105"
-                  style={{
-                    background: theme.accent,
-                    color: "#000000",
-                    border: `1px solid ${theme.accent}`,
-                  }}
-                >
-                  {isReadingAloud ? "Stop Reading" : "Read Aloud"}
-                </button>
+              <div
+                className="rounded-[24px] border p-3"
+                style={{
+                  borderColor: theme.border,
+                  background: theme.playerBg,
+                }}
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold" style={{ color: theme.text }}>
+                      {isReadingAloud ? "Audiobook Mode" : "Read Aloud"}
+                    </p>
+                    <p className="truncate text-xs" style={{ color: theme.muted }}>
+                      {engineLabel}
+                    </p>
+                  </div>
+                  <AudioBars active={speechStatus === "speaking"} theme={theme} />
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={handlePrevWhileReading}
+                    className="rounded-full border px-3 py-2 text-xs font-semibold"
+                    style={{ borderColor: theme.border, color: theme.text }}
+                  >
+                    ⏮
+                  </button>
+
+                  <button
+                    onClick={handleReadAloud}
+                    className="rounded-full px-5 py-2.5 text-xs font-semibold"
+                    style={{
+                      background: theme.accent,
+                      color: "#000000",
+                      border: `1px solid ${theme.accent}`,
+                    }}
+                  >
+                    {isReadingAloud ? "Stop" : "Play"}
+                  </button>
+
+                  <button
+                    onClick={handleNextWhileReading}
+                    className="rounded-full border px-3 py-2 text-xs font-semibold"
+                    style={{ borderColor: theme.border, color: theme.text }}
+                  >
+                    ⏭
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -823,16 +1052,29 @@ export default function KindleReader({
                 </span>
               </div>
 
-              <div className="text-center text-xs font-semibold" style={{ color: theme.text }}>
-                {pageInfo.total > 1 ? `Page ${pageInfo.page} / ${pageInfo.total}` : "Page 1"}
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span style={{ color: theme.text }}>
+                  {pageInfo.total > 1 ? `Page ${pageInfo.page} / ${pageInfo.total}` : "Page 1"}
+                </span>
+                <span style={{ color: theme.muted }}>
+                  {isReadingAloud ? "Auto next page on" : "Manual reading"}
+                </span>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4">
-              <div className="flex items-center justify-start">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrevWhileReading}
+                  className="rounded-full border px-3 py-2 text-sm font-semibold"
+                  style={{ borderColor: theme.border, color: theme.text }}
+                >
+                  ⏮
+                </button>
+
                 <button
                   onClick={handleReadAloud}
-                  className="rounded-full px-5 py-2.5 text-sm font-semibold transition-all hover:scale-105"
+                  className="rounded-full px-5 py-2.5 text-sm font-semibold"
                   style={{
                     background: theme.accent,
                     color: "#000000",
@@ -841,6 +1083,16 @@ export default function KindleReader({
                 >
                   {isReadingAloud ? "Stop Reading" : "Read Aloud"}
                 </button>
+
+                <button
+                  onClick={handleNextWhileReading}
+                  className="rounded-full border px-3 py-2 text-sm font-semibold"
+                  style={{ borderColor: theme.border, color: theme.text }}
+                >
+                  ⏭
+                </button>
+
+                <AudioBars active={speechStatus === "speaking"} theme={theme} />
               </div>
 
               <div className="flex items-center gap-3">
@@ -855,8 +1107,13 @@ export default function KindleReader({
                 </span>
               </div>
 
-              <div className="text-right text-sm font-semibold" style={{ color: theme.text }}>
-                {pageInfo.total > 1 ? `Page ${pageInfo.page} / ${pageInfo.total}` : "Page 1"}
+              <div className="text-right">
+                <div className="text-sm font-semibold" style={{ color: theme.text }}>
+                  {pageInfo.total > 1 ? `Page ${pageInfo.page} / ${pageInfo.total}` : "Page 1"}
+                </div>
+                <div className="text-xs" style={{ color: theme.muted }}>
+                  {engineLabel}
+                </div>
               </div>
             </div>
           )}

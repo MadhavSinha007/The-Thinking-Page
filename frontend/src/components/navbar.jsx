@@ -12,59 +12,87 @@ const Navbar = ({ onLogout, onSearch, darkMode = false, toggleDarkMode }) => {
     navigate(query.trim() ? `/home?search=${encodeURIComponent(query)}` : "/home");
   };
 
-  const bgColor = darkMode ? '#111110' : '#f3ebe3';
-  const borderColor = darkMode ? '#292524' : '#0000001a';
-  const textColor = darkMode ? '#F5F0EB' : '#000000';
+  const theme = {
+    bg: darkMode ? "#111110" : "#efe5dc",
+    surface: darkMode ? "#1C1917" : "#f3ebe3",
+    text: darkMode ? "#F5F0EB" : "#000000",
+    textMuted: darkMode ? "#A8A29E" : "#00000099",
+    border: darkMode ? "#292524" : "#0000001a",
+    accent: "#f57c00",
+  };
 
   return (
     <>
-      <header 
-        className="fixed top-0 left-0 right-0 z-50 border-b"
-        style={{ background: bgColor, borderColor: borderColor }}
+      <header
+        className="fixed left-0 right-0 top-0 z-50 border-b"
+        style={{
+          background: theme.bg,
+          borderColor: theme.border,
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+        }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[60px] flex items-center gap-2">
-          
+        <div className="mx-auto flex h-[60px] max-w-7xl items-center gap-2 px-4 sm:px-6 lg:px-8">
           <button
             onClick={() => navigate("/home")}
-            className="flex items-center gap-2 flex-shrink-0"
+            className="flex flex-shrink-0 items-center gap-2"
           >
-            <div className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border text-sm font-semibold tracking-tight hover:scale-105 transition-transform ${
-              darkMode ? 'border-[#F5F0EB] bg-[#1C1917] text-[#F5F0EB]' : 'border-black bg-white text-black'
-            }`}>
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold tracking-tight transition-transform hover:scale-105"
+              style={{
+                background: darkMode ? "#1C1917" : "#ffffff",
+                color: theme.text,
+                borderColor: darkMode ? "#F5F0EB" : "#000000",
+              }}
+            >
               TP.
             </div>
-            <span className="font-black text-sm sm:text-base hidden md:inline" style={{ color: textColor }}>
+
+            <span
+              className="hidden text-sm font-black sm:inline md:text-base"
+              style={{ color: theme.text }}
+            >
               TheThinkingPage
             </span>
           </button>
 
-          <div className="flex-1 mx-2 sm:mx-4">
+          <div className="mx-2 flex-1 sm:mx-4">
             <SearchBar onSearch={handleSearch} darkMode={darkMode} />
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="hidden sm:flex items-center gap-2">
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <div className="hidden items-center gap-2 sm:flex">
               <button
                 onClick={toggleDarkMode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border hover:scale-105"
-                style={{ color: textColor, borderColor: borderColor }}
+                className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105"
+                style={{
+                  color: theme.text,
+                  borderColor: theme.border,
+                  background: theme.surface,
+                }}
               >
                 {darkMode ? <FiSun size={15} /> : <FiMoon size={15} />}
-                <span className="hidden lg:inline">{darkMode ? 'Light' : 'Dark'}</span>
+                <span className="hidden lg:inline">
+                  {darkMode ? "Light" : "Dark"}
+                </span>
               </button>
 
               <button
                 onClick={onLogout}
-                className="px-4 py-1.5 rounded-full text-sm font-semibold text-black bg-[#f57c00] hover:scale-105 transition-transform"
+                className="rounded-full px-4 py-1.5 text-sm font-semibold text-black transition-transform hover:scale-105"
+                style={{ background: theme.accent }}
               >
                 Logout
               </button>
             </div>
 
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="sm:hidden w-10 h-10 flex items-center justify-center rounded-full"
-              style={{ color: textColor }}
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="flex h-10 w-10 items-center justify-center rounded-full sm:hidden"
+              style={{
+                color: theme.text,
+                background: mobileMenuOpen ? theme.surface : "transparent",
+              }}
             >
               {mobileMenuOpen ? <FiX size={20} /> : <FiMenu size={20} />}
             </button>
@@ -72,20 +100,37 @@ const Navbar = ({ onLogout, onSearch, darkMode = false, toggleDarkMode }) => {
         </div>
 
         {mobileMenuOpen && (
-          <div className="sm:hidden border-t" style={{ background: bgColor, borderColor: borderColor }}>
-            <div className="max-w-7xl mx-auto px-4 py-4 space-y-3">
+          <div
+            className="border-t sm:hidden"
+            style={{
+              background: theme.bg,
+              borderColor: theme.border,
+            }}
+          >
+            <div className="mx-auto max-w-7xl space-y-3 px-4 py-4">
               <button
-                onClick={toggleDarkMode}
-                className="w-full flex justify-between items-center px-4 py-3 rounded-full text-sm font-semibold border"
-                style={{ color: textColor, borderColor: borderColor }}
+                onClick={() => {
+                  toggleDarkMode?.();
+                  setMobileMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-full border px-4 py-3 text-sm font-semibold"
+                style={{
+                  color: theme.text,
+                  borderColor: theme.border,
+                  background: theme.surface,
+                }}
               >
-                <span>Switch to {darkMode ? 'Light' : 'Dark'}</span>
-                {darkMode ? <FiSun size={15} /> : <FiMoon size={15} />}
+                <span>Switch to {darkMode ? "Light" : "Dark"}</span>
+                {darkMode ? <FiSun size={16} /> : <FiMoon size={16} />}
               </button>
 
               <button
-                onClick={onLogout}
-                className="w-full px-4 py-3 rounded-full text-sm font-semibold text-black bg-[#f57c00]"
+                onClick={() => {
+                  onLogout?.();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full rounded-full px-4 py-3 text-sm font-semibold text-black"
+                style={{ background: theme.accent }}
               >
                 Logout
               </button>
