@@ -57,10 +57,7 @@ const buildReaderCss = ({ theme, fontFamily, fontSize, lineHeight, mobile }) => 
     line-height: ${lineHeight} !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
     height: 100% !important;
-    min-height: 100% !important;
-    overflow: hidden !important;
   }
 
   body {
@@ -435,6 +432,7 @@ export default function KindleReader({
       width: "100%",
       height: "100%",
       spread: isMobile ? "none" : "auto",
+      // spread: "auto",
       flow: "paginated",
       manager: "default",
       allowScriptedContent: true,
