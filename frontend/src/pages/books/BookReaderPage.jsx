@@ -2,6 +2,9 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import KindleReader from "../../components/KindleReader/KindleReader";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8090";
+
 const BookReaderPage = () => {
   const { id } = useParams();
   const mainContainerRef = useRef(null);
@@ -12,41 +15,49 @@ const BookReaderPage = () => {
 
   useEffect(() => {
     const mainElement = document.querySelector("main.flex-1.overflow-y-auto");
-    if (mainElement) {
-      mainContainerRef.current = mainElement;
-      const originalOverflow = mainElement.style.overflow;
-      const originalHeight = mainElement.style.height;
 
-      mainElement.style.overflow = "hidden";
-      mainElement.style.height = "100%";
+    if (!mainElement) return;
 
-      return () => {
-        mainElement.style.overflow = originalOverflow;
-        mainElement.style.height = originalHeight;
-      };
-    }
+    mainContainerRef.current = mainElement;
+
+    const originalOverflow = mainElement.style.overflow;
+    const originalHeight = mainElement.style.height;
+
+    mainElement.style.overflow = "hidden";
+    mainElement.style.height = "100%";
+
+    return () => {
+      mainElement.style.overflow = originalOverflow;
+      mainElement.style.height = originalHeight;
+    };
   }, []);
 
   useEffect(() => {
     const loadBook = async () => {
       try {
-        const res = await fetch(`http://localhost:8090/api/books/${id}`);
+        setLoading(true);
+        setError(null);
+
+        const res = await fetch(`${API_BASE_URL}/api/books/${id}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
         const url = data?.file;
 
-        if (!url) throw new Error("No file URL in response");
+        if (!url) throw new Error('No "file" URL in response');
+
         setBookUrl(url);
       } catch (err) {
-        console.error("❌ Error loading book:", err);
-        setError(err.message);
+        console.error("Error loading book:", err);
+        setError(err.message || "Failed to load book");
       } finally {
         setLoading(false);
       }
     };
 
-    loadBook();
+    if (id) {
+      loadBook();
+    }
   }, [id]);
 
   if (loading) {

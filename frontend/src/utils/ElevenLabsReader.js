@@ -1,18 +1,11 @@
 // utils/ElevenLabsReader.js
 
-// Prefer env key if available, otherwise fall back to manual key
-const API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "YOUR_API_KEY";
+// Only API key comes from .env
+const API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 
-// Voice options — swap VOICE_ID to change the narrator
-// Rachel (calm, expressive): 21m00Tcm4TlvDq8ikWAM
-// Clyde (warm, deep):        2EiwWnXFnvU5JabPnv8n
-// Bella (soft, emotive):     EXAVITQu4vr4xnSDxMaL
-// Adam (neutral, clear):     pNInz6obpgDQGcFmaJgB
-const VOICE_ID =
-  import.meta.env.VITE_ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
-
-const MODEL_ID =
-  import.meta.env.VITE_ELEVENLABS_MODEL_ID || "eleven_turbo_v2";
+// Default ElevenLabs voice + model
+const VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+const MODEL_ID = "eleven_turbo_v2";
 
 let currentAudio = null;
 let currentObjectUrl = null;
@@ -28,7 +21,7 @@ const cleanText = (text) =>
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasValidApiKey = () =>
-  !!API_KEY && API_KEY !== "YOUR_API_KEY" && API_KEY.length > 10;
+  typeof API_KEY === "string" && API_KEY.trim().length > 10;
 
 // ──────────────────────────────────────────
 // Stop any playing audio immediately
@@ -54,8 +47,7 @@ export const stopAudio = () => {
 };
 
 // ──────────────────────────────────────────
-// Split text into more natural chunks
-// Keeps larger chunks for smoother prosody
+// Split text into natural chunks
 // ──────────────────────────────────────────
 const chunkText = (text, maxLength = 1400) => {
   const cleaned = cleanText(text);
@@ -199,8 +191,8 @@ export const speakText = async (text, onFinish) => {
   const cleaned = cleanText(text);
 
   if (!hasValidApiKey()) {
-    console.warn(
-      "⚠️ ElevenLabs API key not set. Add VITE_ELEVENLABS_API_KEY or replace YOUR_API_KEY."
+    console.error(
+      "❌ Missing ElevenLabs API key. Add VITE_ELEVENLABS_API_KEY to your .env file."
     );
     onFinish?.({ completed: false });
     return;
@@ -222,7 +214,10 @@ export const speakText = async (text, onFinish) => {
   try {
     // Pre-fetch first 2 chunks for quicker startup
     const blobCache = new Array(chunks.length);
-    const initialPrefetch = chunks.slice(0, 2).map((chunk) => fetchSpeechBlob(chunk));
+    const initialPrefetch = chunks
+      .slice(0, 2)
+      .map((chunk) => fetchSpeechBlob(chunk));
+
     const initialResults = await Promise.allSettled(initialPrefetch);
 
     initialResults.forEach((result, index) => {
@@ -243,7 +238,7 @@ export const speakText = async (text, onFinish) => {
 
       if (abortPlayback) break;
 
-      // Start prefetching one chunk ahead in the background
+      // Prefetch one chunk ahead
       const nextIndex = i + 1;
       if (nextIndex < chunks.length && !blobCache[nextIndex]) {
         fetchSpeechBlob(chunks[nextIndex])

@@ -201,6 +201,7 @@ export default function KindleReader({
   const bookRef = useRef(null);
   const hideTimerRef = useRef(null);
   const autoNextTimerRef = useRef(null);
+  const isReadingAloudRef = useRef(false);
 
   const [themeKey, setThemeKey] = useState("light");
   const [fontIndex, setFontIndex] = useState(0);
@@ -220,11 +221,15 @@ export default function KindleReader({
   const [isMobile, setIsMobile] = useState(false);
   const [speechStatus, setSpeechStatus] = useState("idle");
   const [speechEngine, setSpeechEngine] = useState("idle");
-  const [currentSpokenText, setCurrentSpokenText] = useState("");
+  const [speechError, setSpeechError] = useState("");
 
   const theme = useMemo(() => THEMES[themeKey], [themeKey]);
   const font = FONTS[fontIndex];
   const fontSize = FONT_SIZES[fontSizeIndex];
+
+  useEffect(() => {
+    isReadingAloudRef.current = isReadingAloud;
+  }, [isReadingAloud]);
 
   const clearHideTimer = () => {
     if (hideTimerRef.current) {
@@ -327,24 +332,33 @@ export default function KindleReader({
     if (!text) {
       setSpeechStatus("idle");
       setIsReadingAloud(false);
+      isReadingAloudRef.current = false;
       return;
     }
 
-    setCurrentSpokenText(text);
+    setSpeechError("");
     setSpeechStatus("speaking");
     setSpeechEngine("starting");
 
-    await speakText(text, async ({ completed }) => {
-      const engine = getSpeechEngine();
-      setSpeechEngine(engine || "idle");
+    await speakText(text, async ({ completed, engine, error }) => {
+      setSpeechEngine(engine || getSpeechEngine() || "idle");
+
+      if (error) {
+        setSpeechError(error);
+        setSpeechStatus("error");
+        setIsReadingAloud(false);
+        isReadingAloudRef.current = false;
+        return;
+      }
 
       if (!completed) {
         setSpeechStatus("idle");
         setIsReadingAloud(false);
+        isReadingAloudRef.current = false;
         return;
       }
 
-      if (!continueToNextPage || !isReadingAloud) {
+      if (!continueToNextPage || !isReadingAloudRef.current) {
         setSpeechStatus("idle");
         return;
       }
@@ -353,10 +367,12 @@ export default function KindleReader({
 
       clearAutoNextTimer();
       autoNextTimerRef.current = window.setTimeout(async () => {
-        if (!isReadingAloud) return;
+        if (!isReadingAloudRef.current) return;
+
         await goNext();
+
         window.setTimeout(() => {
-          if (isReadingAloud) {
+          if (isReadingAloudRef.current) {
             readCurrentPage({ continueToNextPage: true });
           }
         }, 450);
@@ -365,7 +381,9 @@ export default function KindleReader({
   };
 
   const startReadAloud = async () => {
+    setSpeechError("");
     setIsReadingAloud(true);
+    isReadingAloudRef.current = true;
     setSpeechStatus("speaking");
     showControls("bottom");
     await readCurrentPage({ continueToNextPage: true });
@@ -375,12 +393,13 @@ export default function KindleReader({
     clearAutoNextTimer();
     stopAudio();
     setIsReadingAloud(false);
+    isReadingAloudRef.current = false;
     setSpeechStatus("idle");
     setSpeechEngine("idle");
   };
 
   const handleReadAloud = async () => {
-    if (isSpeaking() || isReadingAloud) {
+    if (isSpeaking() || isReadingAloudRef.current) {
       stopReadAloud();
     } else {
       await startReadAloud();
@@ -388,7 +407,7 @@ export default function KindleReader({
   };
 
   const handleNextWhileReading = async () => {
-    const keepReading = isReadingAloud;
+    const keepReading = isReadingAloudRef.current;
     stopAudio();
     clearAutoNextTimer();
     await goNext();
@@ -400,7 +419,7 @@ export default function KindleReader({
   };
 
   const handlePrevWhileReading = async () => {
-    const keepReading = isReadingAloud;
+    const keepReading = isReadingAloudRef.current;
     stopAudio();
     clearAutoNextTimer();
     await goPrev();
@@ -424,6 +443,7 @@ export default function KindleReader({
     let mounted = true;
     setLoaded(false);
     setReaderError("");
+    setSpeechError("");
 
     const book = ePub(bookUrl);
     bookRef.current = book;
@@ -432,7 +452,6 @@ export default function KindleReader({
       width: "100%",
       height: "100%",
       spread: isMobile ? "none" : "auto",
-      // spread: "auto",
       flow: "paginated",
       manager: "default",
       allowScriptedContent: true,
@@ -499,6 +518,7 @@ export default function KindleReader({
       clearHideTimer();
       clearAutoNextTimer();
       stopAudio();
+      isReadingAloudRef.current = false;
       try {
         rendition.off?.("relocated", onRelocated);
         rendition.destroy();
@@ -542,7 +562,7 @@ export default function KindleReader({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showSettings, showToc, onClose, isReadingAloud]);
+  }, [showSettings, showToc, onClose]);
 
   useEffect(() => {
     showControls("both");
@@ -633,13 +653,7 @@ export default function KindleReader({
   const bookTitle = metadata?.title || title;
   const authorName = metadata?.creator || author || "EPUB Reader";
   const engineLabel =
-    speechEngine === "elevenlabs"
-      ? "ElevenLabs"
-      : speechEngine === "puter"
-      ? "Puter.js"
-      : speechEngine === "browser"
-      ? "Browser Voice"
-      : "Ready";
+    speechEngine === "elevenlabs" ? "ElevenLabs" : "Ready";
 
   if (readerError) {
     return (
@@ -1001,7 +1015,7 @@ export default function KindleReader({
                       {isReadingAloud ? "Audiobook Mode" : "Read Aloud"}
                     </p>
                     <p className="truncate text-xs" style={{ color: theme.muted }}>
-                      {engineLabel}
+                      {speechError || engineLabel}
                     </p>
                   </div>
                   <AudioBars active={speechStatus === "speaking"} theme={theme} />
@@ -1109,8 +1123,8 @@ export default function KindleReader({
                 <div className="text-sm font-semibold" style={{ color: theme.text }}>
                   {pageInfo.total > 1 ? `Page ${pageInfo.page} / ${pageInfo.total}` : "Page 1"}
                 </div>
-                <div className="text-xs" style={{ color: theme.muted }}>
-                  {engineLabel}
+                <div className="text-xs" style={{ color: speechError ? "#ef4444" : theme.muted }}>
+                  {speechError || engineLabel}
                 </div>
               </div>
             </div>

@@ -1,20 +1,17 @@
 // utils/readerTTS.js
 
-const ELEVENLABS_API_KEY =
-  import.meta.env.VITE_ELEVENLABS_API_KEY || "";
+const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || "";
 
-const ELEVENLABS_VOICE_ID =
-  import.meta.env.VITE_ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
-
-const ELEVENLABS_MODEL_ID =
-  import.meta.env.VITE_ELEVENLABS_MODEL_ID || "eleven_turbo_v2";
+// Hardcoded defaults so only API key is required in .env
+const ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+const ELEVENLABS_MODEL_ID = "eleven_turbo_v2";
 
 let currentAudio = null;
 let currentObjectUrl = null;
-let currentUtterance = null;
 let playing = false;
 let stopRequested = false;
 let currentEngine = "idle";
+let lastError = null;
 
 const cleanText = (text) =>
   String(text || "")
@@ -22,8 +19,15 @@ const cleanText = (text) =>
     .replace(/\u00A0/g, " ")
     .trim();
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const isSpeaking = () => playing;
 export const getSpeechEngine = () => currentEngine;
+export const getSpeechError = () => lastError;
+
+const hasValidElevenLabsKey = () =>
+  typeof ELEVENLABS_API_KEY === "string" &&
+  ELEVENLABS_API_KEY.trim().length > 10;
 
 export const stopAudio = () => {
   stopRequested = true;
@@ -44,28 +48,23 @@ export const stopAudio = () => {
     currentObjectUrl = null;
   }
 
-  if (currentUtterance && "speechSynthesis" in window) {
-    try {
-      window.speechSynthesis.cancel();
-    } catch {}
-    currentUtterance = null;
-  }
-
   currentEngine = "idle";
 };
 
-const chunkText = (text, maxLength = 900) => {
+const chunkText = (text, maxLength = 1200) => {
   const cleaned = cleanText(text);
   if (!cleaned) return [];
 
-  const sentences =
-    cleaned.match(/[^.!?]+[.!?]+["']?|[^.!?]+$/g) || [cleaned];
+  const naturalBreaks =
+    cleaned.match(
+      /[^.!?]+[.!?]+(?:\s|$)|[^,;:]+[,;:](?:\s|$)|[^.!?,;:]+$/g
+    ) || [cleaned];
 
   const chunks = [];
   let current = "";
 
-  for (const sentence of sentences) {
-    const part = sentence.trim();
+  for (const piece of naturalBreaks) {
+    const part = piece.trim();
     if (!part) continue;
 
     if (part.length > maxLength) {
@@ -74,44 +73,46 @@ const chunkText = (text, maxLength = 900) => {
 
       for (const word of words) {
         const next = `${buffer} ${word}`.trim();
+
         if (next.length > maxLength && buffer) {
-          chunks.push(buffer.trim());
+          if (current) {
+            chunks.push(current);
+            current = "";
+          }
+          chunks.push(buffer);
           buffer = word;
         } else {
           buffer = next;
         }
       }
 
-      if (buffer.trim()) {
-        if (current.trim()) {
-          chunks.push(current.trim());
+      if (buffer) {
+        if (current) {
+          chunks.push(current);
           current = "";
         }
-        chunks.push(buffer.trim());
+        chunks.push(buffer);
       }
+
       continue;
     }
 
     const next = `${current} ${part}`.trim();
+
     if (next.length > maxLength && current) {
-      chunks.push(current.trim());
+      chunks.push(current);
       current = part;
     } else {
       current = next;
     }
   }
 
-  if (current.trim()) chunks.push(current.trim());
+  if (current) chunks.push(current);
   return chunks;
 };
 
-const hasValidElevenLabsKey = () =>
-  !!ELEVENLABS_API_KEY &&
-  ELEVENLABS_API_KEY !== "YOUR_API_KEY" &&
-  ELEVENLABS_API_KEY.length > 10;
-
 const fetchElevenLabsBlob = async (text) => {
-  const res = await fetch(
+  const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}/stream`,
     {
       method: "POST",
@@ -124,21 +125,23 @@ const fetchElevenLabsBlob = async (text) => {
         text,
         model_id: ELEVENLABS_MODEL_ID,
         voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.8,
-          style: 0.35,
+          stability: 0.35,
+          similarity_boost: 0.75,
+          style: 0.2,
           use_speaker_boost: true,
         },
       }),
     }
   );
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`ElevenLabs failed (${res.status}): ${err}`);
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(
+      `ElevenLabs API error ${response.status}${errText ? `: ${errText}` : ""}`
+    );
   }
 
-  return res.blob();
+  return response.blob();
 };
 
 const playBlob = (blob) =>
@@ -148,185 +151,153 @@ const playBlob = (blob) =>
       return;
     }
 
-    currentObjectUrl = URL.createObjectURL(blob);
-    currentAudio = new Audio(currentObjectUrl);
-    currentAudio.preload = "auto";
-
-    currentAudio.onended = () => {
-      if (currentObjectUrl) {
+    if (currentObjectUrl) {
+      try {
         URL.revokeObjectURL(currentObjectUrl);
+      } catch {}
+      currentObjectUrl = null;
+    }
+
+    currentObjectUrl = URL.createObjectURL(blob);
+    const audio = new Audio(currentObjectUrl);
+    audio.preload = "auto";
+    audio.playbackRate = 1;
+
+    currentAudio = audio;
+
+    audio.onended = () => {
+      if (currentObjectUrl) {
+        try {
+          URL.revokeObjectURL(currentObjectUrl);
+        } catch {}
         currentObjectUrl = null;
       }
       currentAudio = null;
       resolve();
     };
 
-    currentAudio.onerror = () => {
+    audio.onerror = () => {
       if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
+        try {
+          URL.revokeObjectURL(currentObjectUrl);
+        } catch {}
         currentObjectUrl = null;
       }
       currentAudio = null;
       reject(new Error("Audio playback failed"));
     };
 
-    currentAudio.play().catch(reject);
+    audio.play().catch((err) => {
+      reject(new Error(err?.message || "Audio play() failed"));
+    });
   });
 
 const speakWithElevenLabs = async (text) => {
   currentEngine = "elevenlabs";
-  const chunks = chunkText(text, 900);
 
-  for (const chunk of chunks) {
+  const chunks = chunkText(text, 1200);
+  if (!chunks.length) return;
+
+  const blobCache = new Array(chunks.length);
+
+  const initialPrefetch = chunks.slice(0, 2).map((chunk) => fetchElevenLabsBlob(chunk));
+  const initialResults = await Promise.allSettled(initialPrefetch);
+
+  initialResults.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      blobCache[index] = result.value;
+    }
+  });
+
+  for (let i = 0; i < chunks.length; i++) {
     if (stopRequested) break;
-    const blob = await fetchElevenLabsBlob(chunk);
+
+    let blob = blobCache[i];
+
+    if (!blob) {
+      blob = await fetchElevenLabsBlob(chunks[i]);
+      blobCache[i] = blob;
+    }
+
     if (stopRequested) break;
+
+    const nextIndex = i + 1;
+    if (nextIndex < chunks.length && !blobCache[nextIndex]) {
+      fetchElevenLabsBlob(chunks[nextIndex])
+        .then((nextBlob) => {
+          blobCache[nextIndex] = nextBlob;
+        })
+        .catch((err) => {
+          console.warn(`Prefetch failed for chunk ${nextIndex}:`, err);
+        });
+    }
+
     await playBlob(blob);
-  }
-};
 
-const speakWithPuter = async (text) => {
-  if (!window.puter?.ai?.txt2speech) {
-    throw new Error("Puter.js TTS not available");
-  }
-
-  currentEngine = "puter";
-  const chunks = chunkText(text, 700);
-
-  for (const chunk of chunks) {
-    if (stopRequested) break;
-
-    const result = await window.puter.ai.txt2speech(chunk);
-
-    if (stopRequested) break;
-
-    let audioUrl = null;
-
-    if (typeof result === "string") {
-      audioUrl = result;
-    } else if (result?.url) {
-      audioUrl = result.url;
-    } else if (result?.audio_url) {
-      audioUrl = result.audio_url;
-    } else if (result instanceof Blob) {
-      await playBlob(result);
-      continue;
+    if (!stopRequested) {
+      await sleep(100);
     }
-
-    if (!audioUrl) {
-      throw new Error("Invalid Puter.js TTS response");
-    }
-
-    await new Promise((resolve, reject) => {
-      currentAudio = new Audio(audioUrl);
-      currentAudio.preload = "auto";
-
-      currentAudio.onended = () => {
-        currentAudio = null;
-        resolve();
-      };
-
-      currentAudio.onerror = () => {
-        currentAudio = null;
-        reject(new Error("Puter.js playback failed"));
-      };
-
-      currentAudio.play().catch(reject);
-    });
-  }
-};
-
-const speakWithBrowser = async (text) => {
-  if (!("speechSynthesis" in window)) {
-    throw new Error("Browser TTS not supported");
-  }
-
-  currentEngine = "browser";
-  const chunks = chunkText(text, 1800);
-
-  for (const chunk of chunks) {
-    if (stopRequested) break;
-
-    await new Promise((resolve, reject) => {
-      const utterance = new SpeechSynthesisUtterance(chunk);
-      currentUtterance = utterance;
-
-      const voices = window.speechSynthesis.getVoices();
-      const preferred =
-        voices.find((v) => /en/i.test(v.lang) && /female|zira|samantha|google/i.test(v.name)) ||
-        voices.find((v) => /en/i.test(v.lang)) ||
-        voices[0];
-
-      if (preferred) utterance.voice = preferred;
-
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      utterance.onend = () => {
-        currentUtterance = null;
-        resolve();
-      };
-
-      utterance.onerror = (e) => {
-        currentUtterance = null;
-        reject(new Error(e?.error || "Speech synthesis failed"));
-      };
-
-      window.speechSynthesis.speak(utterance);
-    });
   }
 };
 
 export const speakText = async (text, onFinish) => {
   const cleaned = cleanText(text);
+  lastError = null;
 
   if (!cleaned) {
-    onFinish?.({ completed: true, engine: "idle" });
+    currentEngine = "idle";
+    onFinish?.({ completed: false, engine: "idle", error: null });
+    return;
+  }
+
+  if (!hasValidElevenLabsKey()) {
+    const err = new Error(
+      "Missing ElevenLabs API key. Add VITE_ELEVENLABS_API_KEY to your .env file and restart Vite."
+    );
+    lastError = err.message;
+    currentEngine = "idle";
+    console.error(err.message);
+    onFinish?.({ completed: false, engine: "idle", error: err.message });
     return;
   }
 
   stopAudio();
   stopRequested = false;
   playing = true;
+  currentEngine = "elevenlabs";
 
   try {
-    if (hasValidElevenLabsKey()) {
-      try {
-        await speakWithElevenLabs(cleaned);
-      } catch (err) {
-        console.warn("ElevenLabs unavailable, falling back.", err);
-        if (!stopRequested) {
-          try {
-            await speakWithPuter(cleaned);
-          } catch (puterErr) {
-            console.warn("Puter.js unavailable, falling back.", puterErr);
-            if (!stopRequested) {
-              await speakWithBrowser(cleaned);
-            }
-          }
-        }
-      }
-    } else {
-      try {
-        await speakWithPuter(cleaned);
-      } catch (puterErr) {
-        console.warn("Puter.js unavailable, falling back to browser speech.", puterErr);
-        if (!stopRequested) {
-          await speakWithBrowser(cleaned);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("TTS error:", err);
-  } finally {
+    console.log("Using ElevenLabs TTS");
+    await speakWithElevenLabs(cleaned);
+
     const completed = !stopRequested;
     playing = false;
-    currentEngine = completed ? currentEngine : "idle";
-    stopAudio();
+
+    if (completed) {
+      onFinish?.({
+        completed: true,
+        engine: "elevenlabs",
+        error: null,
+      });
+    } else {
+      onFinish?.({
+        completed: false,
+        engine: "idle",
+        error: null,
+      });
+    }
+  } catch (err) {
+    playing = false;
+    lastError = err?.message || "Unknown ElevenLabs TTS error";
+    console.error("ElevenLabs TTS failed:", err);
     onFinish?.({
-      completed,
-      engine: currentEngine,
+      completed: false,
+      engine: "elevenlabs",
+      error: lastError,
     });
+  } finally {
+    if (!playing) {
+      stopAudio();
+    }
   }
 };
